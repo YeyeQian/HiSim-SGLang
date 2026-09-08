@@ -84,3 +84,25 @@ if [ -e "$1" ]; then
 fi
 printf "/dev/nvidia*: absent\n"
 ' | tee -a "${artifact_dir}/runtime-checks.txt"
+
+docker run --rm --entrypoint sh \
+  --env "EXPECTED_AICONFIGURATOR_COMMIT=${AICONFIGURATOR_COMMIT}" \
+  "${image_tag}" -c '
+actual_commit="$(git -c safe.directory=/opt/src/aiconfigurator -C /opt/src/aiconfigurator rev-parse HEAD)"
+if [ "${actual_commit}" != "${EXPECTED_AICONFIGURATOR_COMMIT}" ]; then
+  echo "unexpected AIConfigurator commit: ${actual_commit}" >&2
+  exit 1
+fi
+data_dir=/opt/venv/lib/python3.10/site-packages/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2
+if [ ! -d "${data_dir}" ]; then
+  echo "AIConfigurator installed performance data is missing: ${data_dir}" >&2
+  exit 1
+fi
+if pointers="$(grep -RIl --include="*.txt" "^version https://git-lfs.github.com/spec/v1$" "${data_dir}")"; then
+  echo "AIConfigurator performance data is still a Git LFS pointer: ${pointers}" >&2
+  exit 1
+fi
+printf "AIConfigurator commit: %s\n" "${actual_commit}"
+printf "git-lfs version: %s\n" "$(git lfs version)"
+printf "AIConfigurator performance data: materialized\n"
+' | tee -a "${artifact_dir}/runtime-checks.txt"

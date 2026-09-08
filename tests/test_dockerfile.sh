@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dockerfile="${repo_root}/Dockerfile"
 entrypoint="${repo_root}/docker/entrypoint.sh"
+inspect_script="${repo_root}/scripts/inspect_image.sh"
 cpu_constraints="${repo_root}/configs/requirements.cpu.txt"
 
 fail() {
@@ -28,6 +29,10 @@ if ((${#from_instructions[@]} != 1)) || [[ "${from_instructions[0]:-}" != "${pin
 fi
 
 require_literal "${dockerfile}" 'ARG AICONFIGURATOR_COMMIT=9f744a1910f317a091c88ade644d61094ea22119'
+require_literal "${dockerfile}" 'ARG GIT_LFS_VERSION=3.7.1'
+require_literal "${dockerfile}" 'WORKDIR /'
+require_literal "${dockerfile}" 'ARG GIT_LFS_SHA256=1c0b6ee5200ca708c5cebebb18fdeb0e1c98f1af5c1a9cba205a4c0ab5a5ec08'
+require_literal "${dockerfile}" 'for attempt in 1 2 3'
 require_literal "${dockerfile}" 'https://download.pytorch.org/whl/cpu'
 require_literal "${dockerfile}" 'torch==2.9.0'
 require_literal "${dockerfile}" 'torchvision==0.24.0'
@@ -37,7 +42,16 @@ require_literal "${dockerfile}" 'pip install --constraint /tmp/requirements.cpu.
 require_literal "${dockerfile}" 'COPY third_party/sglang'
 require_literal "${dockerfile}" 'cp python/pyproject_cpu.toml python/pyproject.toml'
 require_literal "${dockerfile}" 'cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml'
-require_literal "${dockerfile}" 'git+https://github.com/ai-dynamo/aiconfigurator.git@${AICONFIGURATOR_COMMIT}'
+require_literal "${dockerfile}" 'git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout'
+require_literal "${dockerfile}" 'GIT_LFS_SKIP_SMUDGE=1'
+require_literal "${dockerfile}" 'rm -rf /opt/src/aiconfigurator'
+require_literal "${dockerfile}" 'for attempt in 1 2 3'
+require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}"'
+require_literal "${dockerfile}" "git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2/**'"
+require_literal "${dockerfile}" 'test -d "${aic_data_dir}"'
+require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator rev-parse HEAD'
+require_literal "${dockerfile}" 'grep -RIl'
+require_literal "${dockerfile}" 'pip install /opt/src/aiconfigurator'
 require_literal "${dockerfile}" 'third_party/tair-kvcache/hisim'
 require_literal "${dockerfile}" 'pip install --no-deps'
 require_literal "${dockerfile}" 'SGLANG_USE_CPU_ENGINE=1'
@@ -46,6 +60,11 @@ require_literal "${dockerfile}" 'PYTHONUNBUFFERED=1'
 require_literal "${dockerfile}" 'PATH="/opt/venv/bin:${PATH}"'
 require_literal "${dockerfile}" 'apt-get install --no-install-recommends'
 require_literal "${dockerfile}" 'python3-dev'
+require_literal "${dockerfile}" 'git-lfs'
+require_literal "${dockerfile}" 'https://github.com/git-lfs/git-lfs/releases/download/v${GIT_LFS_VERSION}/git-lfs-linux-amd64-v${GIT_LFS_VERSION}.tar.gz'
+require_literal "${dockerfile}" 'sha256sum --check'
+require_literal "${dockerfile}" 'git-lfs/${GIT_LFS_VERSION}'
+require_literal "${dockerfile}" 'git lfs install --system'
 require_literal "${dockerfile}" 'rm -rf /var/lib/apt/lists/*'
 require_literal "${dockerfile}" 'USER app'
 require_literal "${dockerfile}" 'WORKDIR /workspace'
@@ -64,6 +83,12 @@ for constraint in \
   require_literal "${cpu_constraints}" "${constraint}"
 done
 require_literal "${dockerfile}" 'pip install --constraint /tmp/requirements.cpu.txt numpy scikit-learn xgboost'
+require_literal "${inspect_script}" 'version https://git-lfs.github.com/spec/v1'
+require_literal "${inspect_script}" 'AIConfigurator performance data is still a Git LFS pointer'
+require_literal "${inspect_script}" 'AIConfigurator commit:'
+require_literal "${inspect_script}" 'git-lfs version:'
+require_literal "${inspect_script}" 'safe.directory=/opt/src/aiconfigurator'
+require_literal "${inspect_script}" 'AIConfigurator installed performance data is missing'
 
 docker_instructions="$(sed '/^[[:space:]]*#/d' "${dockerfile}")"
 if grep -Eqi -- '(^|[[:space:]])--gpus([=[:space:]]|$)|cuda|nvidia|rocm|xpu|pytorch-cuda|torch[^[:space:]]*\+cu[0-9]+|/cu[0-9]+' <<<"${docker_instructions}"; then

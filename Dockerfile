@@ -55,8 +55,37 @@ COPY third_party/tair-kvcache/hisim /opt/src/hisim
 
 RUN python -m pip install --constraint /tmp/requirements.cpu.txt numpy scikit-learn xgboost
 
-RUN python -m pip install \
-        "aiconfigurator @ git+https://github.com/ai-dynamo/aiconfigurator.git@${AICONFIGURATOR_COMMIT}" \
+WORKDIR /
+ARG GIT_LFS_VERSION=3.7.1
+ARG GIT_LFS_SHA256=1c0b6ee5200ca708c5cebebb18fdeb0e1c98f1af5c1a9cba205a4c0ab5a5ec08
+
+RUN for attempt in 1 2 3; do \
+      python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/git-lfs/git-lfs/releases/download/v${GIT_LFS_VERSION}/git-lfs-linux-amd64-v${GIT_LFS_VERSION}.tar.gz', '/tmp/git-lfs.tar.gz')" \
+        && break; \
+      test "${attempt}" -lt 3 || exit 1; \
+    done \
+    && printf '%s  %s\n' "${GIT_LFS_SHA256}" /tmp/git-lfs.tar.gz | sha256sum --check \
+    && tar -xzf /tmp/git-lfs.tar.gz -C /tmp \
+    && install -m 0755 "/tmp/git-lfs-${GIT_LFS_VERSION}/git-lfs" /usr/local/bin/git-lfs \
+    && git lfs install --system \
+    && git lfs version | grep -F "git-lfs/${GIT_LFS_VERSION}" \
+    && rm -f /tmp/git-lfs.tar.gz
+
+RUN for attempt in 1 2 3; do \
+      rm -rf /opt/src/aiconfigurator; \
+      GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout \
+          https://github.com/ai-dynamo/aiconfigurator.git /opt/src/aiconfigurator \
+        && break; \
+      test "${attempt}" -lt 3 || exit 1; \
+    done \
+    && GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}" \
+    && git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2/**' \
+    && git -C /opt/src/aiconfigurator rev-parse HEAD | grep -Fx "${AICONFIGURATOR_COMMIT}" \
+    && aic_data_dir=/opt/src/aiconfigurator/src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2 \
+    && test -d "${aic_data_dir}" \
+    && ! grep -RIl --include='*.txt' '^version https://git-lfs.github.com/spec/v1$' \
+        "${aic_data_dir}" \
+    && python -m pip install /opt/src/aiconfigurator \
     && python -m pip install --no-deps /opt/src/hisim
 
 RUN useradd --create-home --uid 10001 --shell /bin/bash app \
