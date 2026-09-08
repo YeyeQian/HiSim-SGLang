@@ -367,6 +367,14 @@ unset FAKE_TIMEOUT_EXIT
 [[ ! -e "${state_dir}" ]] || fail 'aborted ShareGPT attempt must clean up the service'
 test "$(<"$(find "${sharegpt_aborted_run}/benchmark/generic/sharegpt" -name exit-code.txt -print -quit)")" = 124
 
+# Argument/environment validation after selecting a ShareGPT-bound service is
+# also a consumed attempt and must not leave that service reusable.
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+if RESOURCE_SAMPLE_INTERVAL_SECONDS=0 bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'invalid ShareGPT benchmark settings unexpectedly succeeded'
+fi
+[[ ! -e "${state_dir}" ]] || fail 'early ShareGPT validation error must clean up the service'
+
 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
 
 BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null

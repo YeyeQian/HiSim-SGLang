@@ -19,18 +19,12 @@ cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
 state_dir="${results_root}/.state/${container_name}"
 timeout_seconds="${BENCHMARK_TIMEOUT_SECONDS:-300}"
 stats_interval="${RESOURCE_SAMPLE_INTERVAL_SECONDS:-1}"
-[[ "${timeout_seconds}" =~ ^[1-9][0-9]*$ && "${stats_interval}" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-  awk -v interval="${stats_interval}" 'BEGIN { exit !(interval > 0) }' ||
-  die "benchmark timeout and resource sampling interval must be positive"
 [[ -s "${state_dir}/container_id" && -s "${state_dir}/run_dir" && -s "${state_dir}/kind" ]] ||
   die "no active project container state exists at ${state_dir}"
-require_command docker
-require_command timeout
 
 container_id="$(<"${state_dir}/container_id")"
 run_dir="$(<"${state_dir}/run_dir")"
 active_kind="$(<"${state_dir}/kind")"
-[[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
 active_dataset_profile=none
 if [[ -s "${state_dir}/dataset_profile" ]]; then
   active_dataset_profile="$(<"${state_dir}/dataset_profile")"
@@ -54,6 +48,9 @@ if [[ "${active_dataset_profile}" = sharegpt ]]; then
   trap cleanup_failed_sharegpt_attempt EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
+fi
+[[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
+if [[ "${active_dataset_profile}" = sharegpt ]]; then
   [[ "${profile}" = sharegpt ]] ||
     die "ShareGPT-bound container accepts only the sharegpt profile; start a fresh generic container for probe or small"
   if ! (
@@ -67,6 +64,11 @@ elif [[ "${profile}" = sharegpt ]]; then
     [[ "$(<"${state_dir}/dataset_profile")" = sharegpt ]] ||
     die "active container lacks the verified ShareGPT mount; stop it and run scripts/start_server.sh generic sharegpt"
 fi
+[[ "${timeout_seconds}" =~ ^[1-9][0-9]*$ && "${stats_interval}" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+  awk -v interval="${stats_interval}" 'BEGIN { exit !(interval > 0) }' ||
+  die "benchmark timeout and resource sampling interval must be positive"
+require_command docker
+require_command timeout
 invocation_id="$(date -u +%Y%m%dT%H%M%S%N)-$$"
 bench_dir="${run_dir}/benchmark/${kind}/${profile}/${invocation_id}"
 server_dir="${run_dir}/server/${kind}"
