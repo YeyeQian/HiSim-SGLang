@@ -15,6 +15,13 @@ fail() {
 [[ "${SGLANG_CPU_PATCH_UPSTREAM_COMMIT:-}" = 2f4a6addf3101342498b4528289c6fd053622530 ]] ||
   fail 'upstream CPU patch provenance is not pinned'
 [[ -f "${patch_file}" ]] || fail 'tracked SGLang CPU patch is missing'
+if grep -n '[[:blank:]]$' "${patch_file}"; then
+  fail 'tracked SGLang CPU patch contains trailing whitespace'
+fi
+expected_patch_id=ab5af423a7740bba40e04752e3c54adc747b02fa
+actual_patch_id="$(git patch-id --stable <"${patch_file}" | awk '{print $1}')"
+[[ "${actual_patch_id}" = "${expected_patch_id}" ]] ||
+  fail "patch semantics drifted: ${actual_patch_id:-missing patch-id}"
 
 mapfile -t changed_paths < <(sed -n 's#^diff --git a/[^ ]* b/##p' "${patch_file}")
 expected_paths=(

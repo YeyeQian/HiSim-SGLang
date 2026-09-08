@@ -32,8 +32,7 @@ diff --git a/python/sglang/srt/layers/layernorm.py b/python/sglang/srt/layers/la
 index 7bef9d2abd..9f4c77a76f 100644
 --- a/python/sglang/srt/layers/layernorm.py
 +++ b/python/sglang/srt/layers/layernorm.py
-@@ -502,12 +502,3 @@ class Gemma3RMSNorm(MultiPlatformOp):
- 
+@@ -503,11 +503,2 @@ class Gemma3RMSNorm(MultiPlatformOp):
      def extra_repr(self):
          return f"{tuple(self.weight.shape)}, eps={self.eps}"
 -
@@ -49,8 +48,7 @@ diff --git a/python/sglang/srt/layers/rotary_embedding.py b/python/sglang/srt/la
 index 9675a7e560..9675a7e560 100644
 --- a/python/sglang/srt/layers/rotary_embedding.py
 +++ b/python/sglang/srt/layers/rotary_embedding.py
-@@ -116,7 +116,7 @@ class RotaryEmbedding(MultiPlatformOp):
- 
+@@ -117,6 +117,6 @@ class RotaryEmbedding(MultiPlatformOp):
          if (
              (not (_is_cuda or _is_npu) or self.head_size not in [64, 128, 256, 512])
 -            and not (_is_cpu and _is_cpu_amx_available)
@@ -58,5 +56,3 @@ index 9675a7e560..9675a7e560 100644
              and not (_is_xpu)
          ):
              if _is_cuda:
--- 
-2.43.0

@@ -18,6 +18,18 @@ require_literal() {
   grep -Fq -- "${literal}" "${file}" || fail "${file#"${repo_root}/"} is missing: ${literal}"
 }
 
+require_block() {
+  local file="$1"
+  local block="$2"
+  python3 - "${file}" "${block}" <<'PYTHON' ||
+import pathlib
+import sys
+
+raise SystemExit(0 if sys.argv[2] in pathlib.Path(sys.argv[1]).read_text() else 1)
+PYTHON
+    fail "${file#"${repo_root}/"} is missing required command block"
+}
+
 [[ -f "${dockerfile}" ]] || fail "Dockerfile is missing"
 [[ -f "${entrypoint}" ]] || fail "docker/entrypoint.sh is missing"
 [[ -f "${cpu_constraints}" ]] || fail "configs/requirements.cpu.txt is missing"
@@ -32,7 +44,9 @@ require_literal "${dockerfile}" 'ARG AICONFIGURATOR_COMMIT=9f744a1910f317a091c88
 require_literal "${dockerfile}" 'ARG GIT_LFS_VERSION=3.7.1'
 require_literal "${dockerfile}" 'WORKDIR /'
 require_literal "${dockerfile}" 'ARG GIT_LFS_SHA256=1c0b6ee5200ca708c5cebebb18fdeb0e1c98f1af5c1a9cba205a4c0ab5a5ec08'
-require_literal "${dockerfile}" 'for attempt in 1 2 3'
+[[ "$(grep -Fc 'for attempt in 1 2 3' "${dockerfile}")" -eq 3 ]] ||
+  fail 'Dockerfile must use three independent bounded retry loops'
+require_block "${dockerfile}" $'RUN for attempt in 1 2 3; do \\\n      rm -f /tmp/git-lfs.tar.gz; \\\n      timeout 60s python -c'
 require_literal "${dockerfile}" 'https://download.pytorch.org/whl/cpu'
 require_literal "${dockerfile}" 'torch==2.9.0'
 require_literal "${dockerfile}" 'torchvision==0.24.0'
@@ -44,10 +58,9 @@ require_literal "${dockerfile}" 'cp python/pyproject_cpu.toml python/pyproject.t
 require_literal "${dockerfile}" 'cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml'
 require_literal "${dockerfile}" 'git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout'
 require_literal "${dockerfile}" 'GIT_LFS_SKIP_SMUDGE=1'
-require_literal "${dockerfile}" 'rm -rf /opt/src/aiconfigurator'
-require_literal "${dockerfile}" 'for attempt in 1 2 3'
+require_block "${dockerfile}" $'RUN for attempt in 1 2 3; do \\\n      rm -rf /opt/src/aiconfigurator; \\\n      timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git clone'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}"'
-require_literal "${dockerfile}" "git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/**'"
+require_block "${dockerfile}" $'    && for attempt in 1 2 3; do \\\n      if [ -d /opt/src/aiconfigurator/.git/lfs/incomplete ]; then \\\n        find /opt/src/aiconfigurator/.git/lfs/incomplete -type f -delete || exit 1; \\\n      fi; \\\n      timeout 300s git -C /opt/src/aiconfigurator lfs pull'
 require_literal "${dockerfile}" 'test -d "${aic_data_dir}"'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator rev-parse HEAD'
 require_literal "${dockerfile}" 'grep -RIl'

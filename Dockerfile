@@ -60,7 +60,8 @@ ARG GIT_LFS_VERSION=3.7.1
 ARG GIT_LFS_SHA256=1c0b6ee5200ca708c5cebebb18fdeb0e1c98f1af5c1a9cba205a4c0ab5a5ec08
 
 RUN for attempt in 1 2 3; do \
-      python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/git-lfs/git-lfs/releases/download/v${GIT_LFS_VERSION}/git-lfs-linux-amd64-v${GIT_LFS_VERSION}.tar.gz', '/tmp/git-lfs.tar.gz')" \
+      rm -f /tmp/git-lfs.tar.gz; \
+      timeout 60s python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/git-lfs/git-lfs/releases/download/v${GIT_LFS_VERSION}/git-lfs-linux-amd64-v${GIT_LFS_VERSION}.tar.gz', '/tmp/git-lfs.tar.gz')" \
         && break; \
       test "${attempt}" -lt 3 || exit 1; \
     done \
@@ -73,13 +74,20 @@ RUN for attempt in 1 2 3; do \
 
 RUN for attempt in 1 2 3; do \
       rm -rf /opt/src/aiconfigurator; \
-      GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout \
+      timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout \
           https://github.com/ai-dynamo/aiconfigurator.git /opt/src/aiconfigurator \
         && break; \
       test "${attempt}" -lt 3 || exit 1; \
     done \
     && GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}" \
-    && git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/**' \
+    && for attempt in 1 2 3; do \
+      if [ -d /opt/src/aiconfigurator/.git/lfs/incomplete ]; then \
+        find /opt/src/aiconfigurator/.git/lfs/incomplete -type f -delete || exit 1; \
+      fi; \
+      timeout 300s git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/**' \
+        && break; \
+      test "${attempt}" -lt 3 || exit 1; \
+    done \
     && git -C /opt/src/aiconfigurator rev-parse HEAD | grep -Fx "${AICONFIGURATOR_COMMIT}" \
     && aic_data_dir=/opt/src/aiconfigurator/src/aiconfigurator/systems/data/h100_sxm \
     && test -d "${aic_data_dir}" \
