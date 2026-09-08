@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${script_dir}/lib/common.sh"
+
+kind="${1:-}"
+profile="${2:-}"
+[[ $# -eq 2 && ( "${kind}" = generic || "${kind}" = h20 ) ]] ||
+  die "usage: $0 generic|h20 probe|small"
+[[ "${profile}" = probe || "${profile}" = small ]] ||
+  die "usage: $0 generic|h20 probe|small"
+
+repo_root="$(project_root)"
+container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
+results_root="${RESULTS_ROOT:-${repo_root}/results}"
+cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
+state_dir="${results_root}/.state/${container_name}"
+timeout_seconds="${BENCHMARK_TIMEOUT_SECONDS:-300}"
+stats_interval="${RESOURCE_SAMPLE_INTERVAL_SECONDS:-1}"
+[[ "${timeout_seconds}" =~ ^[1-9][0-9]*$ && "${stats_interval}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+  die "benchmark timeout must be positive and resource interval nonnegative"
+[[ -s "${state_dir}/container_id" && -s "${state_dir}/run_dir" && -s "${state_dir}/kind" ]] ||
+  die "no active project container state exists at ${state_dir}"
+require_command docker
+require_command timeout
+
+container_id="$(<"${state_dir}/container_id")"
+run_dir="$(<"${state_dir}/run_dir")"
+active_kind="$(<"${state_dir}/kind")"
+[[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
+bench_dir="${run_dir}/benchmark/${kind}/${profile}"
+server_dir="${run_dir}/server/${kind}"
+mkdir -p "${bench_dir}" "${cache_dir}"
+
+common_args=(
+  --backend sglang
+  --base-url http://127.0.0.1:30000
+  --model Qwen/Qwen3-8B
+  --dataset-name random
+  --bench-mode simulation
+  --warmup-requests 0
+  --disable-tqdm
+  --output-file "/results/benchmark/${kind}/${profile}/metrics.json"
+)
+case "${profile}" in
+  probe)
+    profile_args=(--num-prompts 2 --max-concurrency 1 --random-input-len 16 --random-output-len 8)
+    ;;
+  small)
+    profile_args=(--num-prompts 16 --max-concurrency 4 --random-input-len 256 --random-output-len 32)
+    ;;
+esac
+command=(docker exec "${container_id}" /opt/hisim/entrypoint.sh bench "${common_args[@]}" "${profile_args[@]}")
+
+printf '%q ' timeout "${timeout_seconds}s" "${command[@]}" >"${bench_dir}/command.txt"
+printf '\n' >>"${bench_dir}/command.txt"
+printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${bench_dir}/started-at.txt"
+du -sk -- "${cache_dir}" >"${bench_dir}/cache-before.txt"
+touch "${bench_dir}/benchmark-start.marker"
+docker inspect "${container_id}" >"${bench_dir}/container-inspect.json" 2>&1 || true
+printf 'timestamp,cpu,memory,net_io,pids\n' >"${bench_dir}/docker-stats.csv"
+
+sample_once() {
+  local sample
+  sample="$(docker stats --no-stream --format '{{.CPUPerc}},{{.MemUsage}},{{.NetIO}},{{.PIDs}}' "${container_id}" 2>/dev/null || true)"
+  if [[ -n "${sample}" ]]; then
+    printf '%s,%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${sample}" >>"${bench_dir}/docker-stats.csv"
+  fi
+}
+
+sample_resources() {
+  while :; do
+    sample_once
+    sleep "${stats_interval}"
+  done
+}
+sample_once
+sample_resources &
+sampler_pid=$!
+
+set +e
+timeout "${timeout_seconds}s" "${command[@]}" >"${bench_dir}/stdout.log" 2>"${bench_dir}/stderr.log"
+benchmark_status=$?
+set -e
+kill "${sampler_pid}" >/dev/null 2>&1 || true
+wait "${sampler_pid}" 2>/dev/null || true
+
+printf '%s\n' "${benchmark_status}" >"${bench_dir}/exit-code.txt"
+printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${bench_dir}/ended-at.txt"
+du -sk -- "${cache_dir}" >"${bench_dir}/cache-after.txt"
+find "${cache_dir}" -type f \
+  \( -name '*.safetensors' -o -name 'pytorch_model*.bin' -o -name '*.gguf' \) \
+  -newer "${bench_dir}/benchmark-start.marker" -print >"${bench_dir}/cache-weight-changes.txt"
+docker inspect "${container_id}" >"${bench_dir}/container-inspect-after.json" 2>&1 || true
+docker logs "${container_id}" >"${server_dir}/container.log" 2>&1 || true
+
+awk -F, '
+  function mib(value, number) {
+    sub(/^[[:space:]]*/, "", value)
+    number=value + 0
+    if (value ~ /GiB/) return number * 1024
+    if (value ~ /KiB/) return number / 1024
+    if (value ~ /B/) return number / 1024 / 1024
+    return number
+  }
+  NR > 1 {
+    cpu=$2; gsub(/%/, "", cpu); if (cpu + 0 > peak_cpu) peak_cpu=cpu + 0
+    split($3, usage, "/"); memory_mib=mib(usage[1]); if (memory_mib > peak_memory_mib) peak_memory_mib=memory_mib
+  }
+  END { printf "peak_cpu_percent=%.2f\npeak_memory_mib=%.2f\n", peak_cpu, peak_memory_mib }
+' "${bench_dir}/docker-stats.csv" >"${bench_dir}/resource-peak.txt"
+
+guard_pattern='Loading checkpoint shards|Loading safetensors checkpoint|Loading model weights|Weights loaded into memory|Executing real model forward|ModelRunner[.]forward|Forward pass started|CUDA (runtime )?initialized|Initializing CUDA|torch[.]cuda[.]init|NCCL communicator'
+guard_match="$(grep -E -m1 "${guard_pattern}" "${server_dir}/container.log" || true)"
+if [[ -n "${guard_match}" ]]; then
+  printf 'Forbidden real weight-load/model-forward indicator: %s\n' "${guard_match}" >"${bench_dir}/guard-failure.txt"
+  bash "${repo_root}/scripts/stop_server.sh" || true
+  exit 90
+fi
+
+exit "${benchmark_status}"

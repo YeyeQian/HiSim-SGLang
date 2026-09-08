@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${script_dir}/lib/common.sh"
+
+kind="${1:-}"
+[[ $# -eq 1 && ( "${kind}" = generic || "${kind}" = h20 ) ]] ||
+  die "usage: $0 generic|h20"
+
+repo_root="$(project_root)"
+image="${HISIM_IMAGE:-hisim-sglang-cpu:0.5.6.post2}"
+container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
+port="${HISIM_PORT:-30000}"
+results_root="${RESULTS_ROOT:-${repo_root}/results}"
+cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
+state_dir="${results_root}/.state/${container_name}"
+
+case "${kind}" in
+  generic)
+    config_path="${repo_root}/third_party/tair-kvcache/hisim/test/assets/mock/config.json"
+    ;;
+  h20)
+    config_path="${repo_root}/configs/h20-qwen3-8b.json"
+    h20_data_dir="${repo_root}/artifacts/h20_aic/aic"
+    [[ -d "${h20_data_dir}" ]] || die "H20 data is missing at ${h20_data_dir}; run scripts/fetch_h20_data.sh first"
+    ;;
+esac
+[[ -f "${config_path}" ]] || die "${kind} config is missing at ${config_path}"
+
+HISIM_PORT="${port}" bash "${repo_root}/scripts/preflight.sh"
+if docker container inspect "${container_name}" >/dev/null 2>&1; then
+  die "container ${container_name} already exists; stop it explicitly before retrying"
+fi
+
+run_id="$(date -u +%Y%m%dT%H%M%SZ)-${kind}-$$"
+run_dir="${results_root}/${run_id}"
+server_dir="${run_dir}/server/${kind}"
+mkdir -p "${cache_dir}" "${server_dir}" "${state_dir}"
+du -sk -- "${cache_dir}" >"${server_dir}/cache-before.txt"
+
+docker_args=(
+  run --detach
+  --name "${container_name}"
+  --cpus 16
+  --memory 32g
+  --shm-size 4g
+  --network bridge
+  --publish "127.0.0.1:${port}:30000"
+  --env HISIM_CONFIG_PATH=/run/hisim/config.json
+  --env MODEL_PATH=Qwen/Qwen3-8B
+  --env HOST=0.0.0.0
+  --env PORT=30000
+  --volume "${repo_root}/third_party/tair-kvcache:/workspace/tair-kvcache:ro"
+  --volume "${config_path}:/run/hisim/config.json:ro"
+  --volume "${cache_dir}:/root/.cache/huggingface:rw"
+  --volume "${run_dir}:/results:rw"
+)
+if [[ "${kind}" = h20 ]]; then
+  docker_args+=(--volume "${h20_data_dir}:/run/hisim/h20:ro")
+fi
+docker_args+=("${image}" server)
+
+{
+  printf 'run_id=%q\n' "${run_id}"
+  printf 'kind=%q\n' "${kind}"
+  printf 'image=%q\n' "${image}"
+  printf 'container_name=%q\n' "${container_name}"
+  printf 'host_port=%q\n' "${port}"
+  printf 'started_at=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'config_path=%q\n' "${config_path}"
+  printf 'command='; printf '%q ' docker "${docker_args[@]}"; printf '\n'
+} >"${server_dir}/launch.env"
+
+container_id="$(docker "${docker_args[@]}")"
+[[ -n "${container_id}" ]] || die "Docker did not return a container ID"
+printf '%s\n' "${container_id}" >"${state_dir}/container_id"
+printf '%s\n' "${container_name}" >"${state_dir}/container_name"
+printf '%s\n' "${kind}" >"${state_dir}/kind"
+printf '%s\n' "${run_dir}" >"${state_dir}/run_dir"
+
+printf 'Started %s as %s (%s); evidence: %s\n' \
+  "${kind}" "${container_name}" "${container_id}" "${server_dir}"
