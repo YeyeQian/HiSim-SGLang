@@ -12,6 +12,7 @@ kind="${1:-}"
 repo_root="$(project_root)"
 image="${HISIM_IMAGE:-hisim-sglang-cpu:0.5.6.post2}"
 container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
+metadata_name="${container_name}-metadata"
 port="${HISIM_PORT:-30000}"
 results_root="${RESULTS_ROOT:-${repo_root}/results}"
 cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
@@ -36,6 +37,9 @@ HISIM_PORT="${port}" bash "${repo_root}/scripts/preflight.sh"
 if docker container inspect "${container_name}" >/dev/null 2>&1; then
   die "container ${container_name} already exists; stop it explicitly before retrying"
 fi
+if docker container inspect "${metadata_name}" >/dev/null 2>&1; then
+  die "project metadata container ${metadata_name} already exists; inspect and remove it before retrying"
+fi
 
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-${kind}-$$"
 run_dir="${results_root}/${run_id}"
@@ -55,8 +59,9 @@ proxy="$(proxy_url)"
 metadata_code='from transformers import AutoConfig, AutoTokenizer; model="Qwen/Qwen3-8B"; AutoConfig.from_pretrained(model); AutoTokenizer.from_pretrained(model)'
 metadata_args=(
   run --rm
-  --name "${container_name}"
+  --name "${metadata_name}"
   --network host
+  --label com.hisim-sglang.role=metadata
   --user "${runtime_uid}:${runtime_gid}"
   --env "HTTP_PROXY=${proxy}"
   --env "HTTPS_PROXY=${proxy}"
@@ -65,13 +70,33 @@ metadata_args=(
   --volume "${cache_dir}:/home/app/.cache/huggingface:rw"
   "${image}" shell -c "python -c '${metadata_code}'"
 )
-printf '%q ' timeout "${metadata_timeout}s" docker "${metadata_args[@]}" >"${server_dir}/metadata-command.txt"
-printf '\n' >>"${server_dir}/metadata-command.txt"
+
+cleanup_metadata() {
+  local role metadata_id
+  role="$(docker inspect --format '{{index .Config.Labels "com.hisim-sglang.role"}}' "${metadata_name}" 2>/dev/null || true)"
+  [[ -n "${role}" ]] || return 0
+  if [[ "${role}" != metadata ]]; then
+    printf 'ERROR: refusing cleanup: %s lacks the project metadata ownership label\n' "${metadata_name}" >&2
+    return 1
+  fi
+  metadata_id="$(docker inspect --format '{{.Id}}' "${metadata_name}")"
+  docker stop "${metadata_id}" >/dev/null 2>&1 || true
+  docker rm "${metadata_id}" >/dev/null 2>&1 || true
+}
+
+printf 'timeout %qs docker run --rm --name %q --network host --label com.hisim-sglang.role=metadata --env HTTP_PROXY=<redacted> --env HTTPS_PROXY=<redacted> --volume %q %q shell -c <metadata-only-python>\n' \
+  "${metadata_timeout}" "${metadata_name}" "${cache_dir}:/home/app/.cache/huggingface:rw" "${image}" \
+  >"${server_dir}/metadata-command.txt"
+trap cleanup_metadata EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 set +e
 timeout "${metadata_timeout}s" docker "${metadata_args[@]}" \
   >"${server_dir}/metadata.stdout.log" 2>"${server_dir}/metadata.stderr.log"
 metadata_status=$?
 set -e
+cleanup_metadata
+trap - EXIT INT TERM
 printf '%s\n' "${metadata_status}" >"${server_dir}/metadata.exit-code.txt"
 du -sk -- "${cache_dir}" >"${server_dir}/cache-after-metadata.txt"
 [[ "${metadata_status}" -eq 0 ]] ||

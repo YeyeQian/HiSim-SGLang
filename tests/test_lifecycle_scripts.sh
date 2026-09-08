@@ -24,11 +24,29 @@ printf '%s\n' "$*" >>"${FAKE_DOCKER_LOG}"
 case "${1:-} ${2:-}" in
   'info --format') echo /tmp ;;
   'container inspect')
-    [[ "${FAKE_NAME_EXISTS:-0}" = 1 ]] || exit 1
+    if [[ "${3:-}" = *-metadata ]]; then
+      [[ "${FAKE_METADATA_COLLISION:-0}" = 1 ]] || exit 1
+    else
+      [[ "${FAKE_NAME_EXISTS:-0}" = 1 ]] || exit 1
+    fi
     echo '{}'
+    ;;
+  'run --rm')
+    if [[ "${FAKE_METADATA_EXIT:-}" != '' ]]; then
+      exit "${FAKE_METADATA_EXIT}"
+    fi
     ;;
   'run --detach') echo project-container-id ;;
   'inspect --format')
+    if [[ "${4:-}" = *-metadata ]]; then
+      [[ "${FAKE_METADATA_EXISTS:-0}" = 1 ]] || exit 1
+      if [[ "$3" = *Config.Labels* ]]; then
+        echo metadata
+      else
+        echo metadata-container-id
+      fi
+      exit 0
+    fi
     case "$3" in
       *State.Running*) [[ "${FAKE_CONTAINER_RUNNING:-1}" = 1 ]] && echo true || echo false ;;
       *State.Status*) echo "${FAKE_CONTAINER_STATUS:-running}" ;;
@@ -57,7 +75,7 @@ case "${1:-} ${2:-}" in
     echo benchmark-stderr >&2
     exit "${FAKE_BENCH_EXIT:-0}"
     ;;
-  'stop project-container-id'|'rm project-container-id') ;;
+  'stop project-container-id'|'rm project-container-id'|'stop metadata-container-id'|'rm metadata-container-id') ;;
   *) ;;
 esac
 EOF
@@ -110,7 +128,8 @@ done
 
 : >"${FAKE_DOCKER_LOG}"
 bash "${root_dir}/scripts/start_server.sh" generic
-assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke --network host'
+assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke-metadata --network host'
+assert_contains "${FAKE_DOCKER_LOG}" '--label com.hisim-sglang.role=metadata'
 assert_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY=http://127.0.0.1:17897'
 assert_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY=http://127.0.0.1:17897'
 assert_contains "${FAKE_DOCKER_LOG}" 'AutoConfig.from_pretrained'
@@ -311,5 +330,31 @@ assert_contains "${FAKE_DOCKER_LOG}" 'inspect --format {{.Id}} hisim-sglang-cpu-
 assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
 assert_contains "${FAKE_DOCKER_LOG}" 'rm project-container-id'
 assert_not_contains "${FAKE_DOCKER_LOG}" 'rm hisim-sglang-cpu-smoke'
+
+# A failed/timed-out metadata helper is removed only after its ownership label
+# and full ID are checked. It must never leave normal service state behind.
+FAKE_METADATA_EXIT=124
+FAKE_METADATA_EXISTS=1
+export FAKE_METADATA_EXIT FAKE_METADATA_EXISTS
+: >"${FAKE_DOCKER_LOG}"
+if bash "${root_dir}/scripts/start_server.sh" generic >/dev/null 2>&1; then
+  fail 'metadata preparation timeout must fail startup'
+fi
+assert_contains "${FAKE_DOCKER_LOG}" 'inspect --format {{index .Config.Labels "com.hisim-sglang.role"}} hisim-sglang-cpu-smoke-metadata'
+assert_contains "${FAKE_DOCKER_LOG}" 'inspect --format {{.Id}} hisim-sglang-cpu-smoke-metadata'
+assert_contains "${FAKE_DOCKER_LOG}" 'stop metadata-container-id'
+assert_contains "${FAKE_DOCKER_LOG}" 'rm metadata-container-id'
+[[ ! -s "${state_dir}/container_id" ]] || fail 'metadata failure must not create service state'
+unset FAKE_METADATA_EXIT FAKE_METADATA_EXISTS
+
+# Proxy overrides must never appear in durable command evidence (including any
+# future credential-bearing form accepted by proxy validation).
+export DOCKER_PROJECT_PROXY='http://private-proxy.example:17897'
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+run_dir="$(<"${state_dir}/run_dir")"
+assert_not_contains "${run_dir}/server/generic/metadata-command.txt" 'private-proxy.example'
+assert_contains "${run_dir}/server/generic/metadata-command.txt" 'HTTP_PROXY=<redacted>'
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+unset DOCKER_PROJECT_PROXY
 
 printf 'lifecycle script tests passed\n'
