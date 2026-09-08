@@ -31,7 +31,38 @@ container_id="$(<"${state_dir}/container_id")"
 run_dir="$(<"${state_dir}/run_dir")"
 active_kind="$(<"${state_dir}/kind")"
 [[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
-if [[ "${profile}" = sharegpt ]]; then
+active_dataset_profile=none
+if [[ -s "${state_dir}/dataset_profile" ]]; then
+  active_dataset_profile="$(<"${state_dir}/dataset_profile")"
+fi
+sharegpt_bound=0
+sampler_pid=""
+cleanup_failed_sharegpt_attempt() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -n "${sampler_pid}" ]]; then
+    kill "${sampler_pid}" >/dev/null 2>&1 || true
+    wait "${sampler_pid}" 2>/dev/null || true
+  fi
+  if [[ "${sharegpt_bound}" -eq 1 && "${status}" -ne 0 ]]; then
+    bash "${repo_root}/scripts/stop_server.sh" >/dev/null 2>&1 || true
+  fi
+  exit "${status}"
+}
+if [[ "${active_dataset_profile}" = sharegpt ]]; then
+  sharegpt_bound=1
+  trap cleanup_failed_sharegpt_attempt EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  [[ "${profile}" = sharegpt ]] ||
+    die "ShareGPT-bound container accepts only the sharegpt profile; start a fresh generic container for probe or small"
+  if ! (
+    set -o noclobber
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${state_dir}/sharegpt-attempted"
+  ) 2>/dev/null; then
+    die "ShareGPT benchmark was already attempted; start a fresh generic sharegpt container"
+  fi
+elif [[ "${profile}" = sharegpt ]]; then
   [[ -s "${state_dir}/dataset_profile" ]] &&
     [[ "$(<"${state_dir}/dataset_profile")" = sharegpt ]] ||
     die "active container lacks the verified ShareGPT mount; stop it and run scripts/start_server.sh generic sharegpt"
@@ -103,6 +134,7 @@ benchmark_status=$?
 set -e
 kill "${sampler_pid}" >/dev/null 2>&1 || true
 wait "${sampler_pid}" 2>/dev/null || true
+sampler_pid=""
 
 printf '%s\n' "${benchmark_status}" >"${bench_dir}/exit-code.txt"
 printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${bench_dir}/ended-at.txt"

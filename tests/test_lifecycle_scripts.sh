@@ -47,6 +47,7 @@ case "${1:-} ${2:-}" in
       fi
       exit 0
     fi
+    [[ "${FAKE_ACTUAL_CONTAINER_MISSING:-0}" != 1 ]] || exit 1
     case "$3" in
       *State.Running*) [[ "${FAKE_CONTAINER_RUNNING:-1}" = 1 ]] && echo true || echo false ;;
       *State.Status*) echo "${FAKE_CONTAINER_STATUS:-running}" ;;
@@ -67,6 +68,9 @@ case "${1:-} ${2:-}" in
     ;;
   'stats --no-stream') echo '12.00%,100MiB / 32GiB,1KiB / 2KiB,3' ;;
   'exec project-container-id')
+    if [[ "${FAKE_EXPECT_SHAREGPT_SENTINEL:-0}" = 1 ]]; then
+      [[ -s "${SHAREGPT_SENTINEL_PATH}" ]] || exit 98
+    fi
     if [[ "${FAKE_BENCH_TRIGGER_GUARD:-0}" = 1 ]]; then
       printf '%s\n' 'Load weight end.' >"${FAKE_FOLLOW_WAIT_FILE}"
       sleep 0.1
@@ -144,7 +148,17 @@ bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
 assert_contains "${FAKE_DOCKER_LOG}" "${sharegpt_fixture}:/opt/hisim-data/sharegpt.json:ro"
 state_dir="${RESULTS_ROOT}/.state/hisim-sglang-cpu-smoke"
 test "$(<"${state_dir}/dataset_profile")" = sharegpt
+printf 'old-sharegpt-result\n' >"${state_dir}/last-benchmark-sharegpt"
+printf 'attempted\n' >"${state_dir}/sharegpt-attempted"
 bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+[[ ! -e "${state_dir}" ]] || fail 'normal stop must remove every ShareGPT state file and the state directory'
+
+# The already-absent-container branch must clear the same complete state set.
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+printf 'old-sharegpt-result\n' >"${state_dir}/last-benchmark-sharegpt"
+printf 'attempted\n' >"${state_dir}/sharegpt-attempted"
+FAKE_ACTUAL_CONTAINER_MISSING=1 bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+[[ ! -e "${state_dir}" ]] || fail 'missing-container stop must remove every ShareGPT state file and the state directory'
 
 printf 'invalid\n' >"${sharegpt_fixture}"
 if bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null 2>&1; then
@@ -289,8 +303,23 @@ if bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1;
 fi
 bash "${root_dir}/scripts/stop_server.sh" >/dev/null
 bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+
+# A ShareGPT-bound server cannot consume its one simulation on a synthetic
+# profile; this early error also makes the server non-reusable.
 : >"${FAKE_DOCKER_LOG}"
+if bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
+  fail 'ShareGPT-bound server must reject a synthetic profile'
+fi
+assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
+assert_contains "${FAKE_DOCKER_LOG}" 'rm project-container-id'
+[[ ! -e "${state_dir}" ]] || fail 'wrong-profile ShareGPT service must be cleaned up'
+
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+: >"${FAKE_DOCKER_LOG}"
+export FAKE_EXPECT_SHAREGPT_SENTINEL=1
+export SHAREGPT_SENTINEL_PATH="${state_dir}/sharegpt-attempted"
 BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt
+unset FAKE_EXPECT_SHAREGPT_SENTINEL SHAREGPT_SENTINEL_PATH
 bench_dir="$(<"${state_dir}/last-benchmark-sharegpt")"
 assert_contains "${bench_dir}/command.txt" '--dataset-name sharegpt'
 assert_contains "${bench_dir}/command.txt" '--dataset-path /opt/hisim-data/sharegpt.json'
@@ -299,7 +328,45 @@ assert_contains "${bench_dir}/command.txt" '--max-concurrency 16'
 assert_contains "${bench_dir}/command.txt" '--seed 1'
 assert_contains "${bench_dir}/command.txt" '--sharegpt-context-len 4096'
 assert_not_contains "${bench_dir}/command.txt" '--sharegpt-output-len'
-bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+[[ -s "${state_dir}/sharegpt-attempted" ]] || fail 'ShareGPT attempt sentinel is missing'
+
+# The successful service stays available for validation, but a second attempt
+# is rejected and tears down the now-invalid reusable state.
+: >"${FAKE_DOCKER_LOG}"
+if bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'ShareGPT service accepted a repeated benchmark attempt'
+fi
+assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
+assert_contains "${FAKE_DOCKER_LOG}" 'rm project-container-id'
+[[ ! -e "${state_dir}" ]] || fail 'repeated ShareGPT attempt must clean up the service'
+
+# A benchmark process failure also consumes the fresh service and preserves its
+# result evidence under the run directory while clearing reusable state.
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+sharegpt_failed_run="$(<"${state_dir}/run_dir")"
+export FAKE_BENCH_EXIT=23
+: >"${FAKE_DOCKER_LOG}"
+if bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'failed ShareGPT benchmark unexpectedly succeeded'
+fi
+unset FAKE_BENCH_EXIT
+assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
+assert_contains "${FAKE_DOCKER_LOG}" 'rm project-container-id'
+[[ ! -e "${state_dir}" ]] || fail 'failed ShareGPT attempt must clean up the service'
+test "$(<"$(find "${sharegpt_failed_run}/benchmark/generic/sharegpt" -name exit-code.txt -print -quit)")" = 23
+
+# A timeout/abort occurs after the sentinel is installed and must likewise make
+# the server non-reusable.
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+sharegpt_aborted_run="$(<"${state_dir}/run_dir")"
+export FAKE_TIMEOUT_EXIT=124
+if bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'timed-out ShareGPT benchmark unexpectedly succeeded'
+fi
+unset FAKE_TIMEOUT_EXIT
+[[ ! -e "${state_dir}" ]] || fail 'aborted ShareGPT attempt must clean up the service'
+test "$(<"$(find "${sharegpt_aborted_run}/benchmark/generic/sharegpt" -name exit-code.txt -print -quit)")" = 124
+
 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
 
 BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null
@@ -393,6 +460,14 @@ bash "${root_dir}/scripts/stop_server.sh"
 assert_not_contains "${FAKE_DOCKER_LOG}" 'prune'
 assert_not_contains "${FAKE_DOCKER_LOG}" 'container ls'
 assert_not_contains "${FAKE_DOCKER_LOG}" '--filter'
+
+# A previous buggy cleanup can leave ShareGPT-only state without a container
+# ID; a later stop must heal that exact recognized stale state.
+mkdir -p "${state_dir}"
+printf 'sharegpt\n' >"${state_dir}/dataset_profile"
+printf 'old-result\n' >"${state_dir}/last-benchmark-sharegpt"
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+[[ ! -e "${state_dir}" ]] || fail 'stop must heal ShareGPT-only stale state without a container ID'
 
 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
 : >"${FAKE_DOCKER_LOG}"

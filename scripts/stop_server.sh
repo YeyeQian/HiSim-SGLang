@@ -11,7 +11,19 @@ results_root="${RESULTS_ROOT:-${repo_root}/results}"
 cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
 state_dir="${results_root}/.state/${container_name}"
 
+clear_active_state() {
+  rm -f "${state_dir}/container_id" "${state_dir}/container_name" \
+    "${state_dir}/kind" "${state_dir}/run_dir" "${state_dir}/dataset_profile" \
+    "${state_dir}/last-benchmark-probe" "${state_dir}/last-benchmark-small" \
+    "${state_dir}/last-benchmark-sharegpt" "${state_dir}/sharegpt-attempted"
+  rmdir "${state_dir}" 2>/dev/null ||
+    die "state directory ${state_dir} contains unexpected files; inspect it before retrying"
+}
+
 if [[ ! -s "${state_dir}/container_id" ]]; then
+  if [[ -d "${state_dir}" ]]; then
+    clear_active_state
+  fi
   printf 'No active project container state for %s.\n' "${container_name}"
   exit 0
 fi
@@ -24,10 +36,8 @@ mkdir -p "${server_dir}"
 
 actual_id="$(docker inspect --format '{{.Id}}' "${container_name}" 2>/dev/null || true)"
 if [[ -z "${actual_id}" ]]; then
-  printf 'Recorded container %s no longer exists; preserving state evidence.\n' "${container_id}"
-  rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir" \
-    "${state_dir}/last-benchmark-probe" "${state_dir}/last-benchmark-small"
-  rmdir "${state_dir}" 2>/dev/null || true
+  printf 'Recorded container %s no longer exists; clearing stale active state.\n' "${container_id}"
+  clear_active_state
   exit 0
 fi
 [[ "${actual_id}" = "${container_id}" ]] ||
@@ -40,7 +50,5 @@ printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${server_dir}/stopped-at.txt"
 
 docker stop "${container_id}" >/dev/null
 docker rm "${container_id}" >/dev/null
-rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir" \
-  "${state_dir}/last-benchmark-probe" "${state_dir}/last-benchmark-small"
-rmdir "${state_dir}" 2>/dev/null || true
+clear_active_state
 printf 'Stopped and removed project container %s (%s).\n' "${container_name}" "${container_id}"
