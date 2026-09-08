@@ -9,3 +9,5 @@ logs/
 artifacts/h20_aic/
 artifacts/downloads/
 artifacts/image/
+__pycache__/
+*.py[cod]
