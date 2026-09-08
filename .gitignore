@@ -8,3 +8,4 @@ logs/
 *.env.local
 artifacts/h20_aic/
 artifacts/downloads/
+artifacts/image/

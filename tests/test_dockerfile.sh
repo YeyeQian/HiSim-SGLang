@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dockerfile="${repo_root}/Dockerfile"
 entrypoint="${repo_root}/docker/entrypoint.sh"
+cpu_constraints="${repo_root}/configs/requirements.cpu.txt"
 
 fail() {
   echo "test_dockerfile.sh: $*" >&2
@@ -18,6 +19,7 @@ require_literal() {
 
 [[ -f "${dockerfile}" ]] || fail "Dockerfile is missing"
 [[ -f "${entrypoint}" ]] || fail "docker/entrypoint.sh is missing"
+[[ -f "${cpu_constraints}" ]] || fail "configs/requirements.cpu.txt is missing"
 
 pinned_from='FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f'
 mapfile -t from_instructions < <(awk 'toupper($1) == "FROM" { print }' "${dockerfile}")
@@ -30,6 +32,8 @@ require_literal "${dockerfile}" 'https://download.pytorch.org/whl/cpu'
 require_literal "${dockerfile}" 'torch==2.9.0'
 require_literal "${dockerfile}" 'torchvision==0.24.0'
 require_literal "${dockerfile}" 'triton==3.5.0'
+require_literal "${dockerfile}" 'COPY configs/requirements.cpu.txt /tmp/requirements.cpu.txt'
+require_literal "${dockerfile}" 'pip install --constraint /tmp/requirements.cpu.txt ./python'
 require_literal "${dockerfile}" 'COPY third_party/sglang'
 require_literal "${dockerfile}" 'cp python/pyproject_cpu.toml python/pyproject.toml'
 require_literal "${dockerfile}" 'cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml'
@@ -46,6 +50,20 @@ require_literal "${dockerfile}" 'rm -rf /var/lib/apt/lists/*'
 require_literal "${dockerfile}" 'USER app'
 require_literal "${dockerfile}" 'WORKDIR /workspace'
 require_literal "${dockerfile}" 'ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]'
+if grep -Eq '^COPY[[:space:]]+--chmod' "${dockerfile}"; then
+  fail "Dockerfile uses COPY --chmod, which is unsupported by the available legacy builder"
+fi
+require_literal "${dockerfile}" 'chmod 0755 /usr/local/bin/entrypoint.sh'
+
+for constraint in \
+  'torch==2.9.0+cpu' \
+  'torchvision==0.24.0+cpu' \
+  'triton==3.5.0' \
+  'compressed-tensors==0.15.0' \
+  'xgboost==2.0.3'; do
+  require_literal "${cpu_constraints}" "${constraint}"
+done
+require_literal "${dockerfile}" 'pip install --constraint /tmp/requirements.cpu.txt numpy scikit-learn xgboost'
 
 docker_instructions="$(sed '/^[[:space:]]*#/d' "${dockerfile}")"
 if grep -Eqi -- '(^|[[:space:]])--gpus([=[:space:]]|$)|cuda|nvidia|rocm|xpu|pytorch-cuda|torch[^[:space:]]*\+cu[0-9]+|/cu[0-9]+' <<<"${docker_instructions}"; then

@@ -1,0 +1,8 @@
+# Keep transitive SGLang dependencies from replacing the CPU-only torch stack.
+torch==2.9.0+cpu
+torchvision==0.24.0+cpu
+triton==3.5.0
+# 0.16.0 and newer require torch>=2.10 and trigger a CUDA-enabled upgrade.
+compressed-tensors==0.15.0
+# Newer Linux wheels declare an NVIDIA NCCL dependency.
+xgboost==2.0.3

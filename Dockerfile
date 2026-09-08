@@ -38,17 +38,19 @@ RUN python -m pip install --upgrade pip setuptools wheel scikit-build-core \
         triton==3.5.0
 
 COPY third_party/sglang /opt/src/sglang
+COPY configs/requirements.cpu.txt /tmp/requirements.cpu.txt
 
 WORKDIR /opt/src/sglang
 RUN cp python/pyproject_cpu.toml python/pyproject.toml \
-    && python -m pip install ./python \
+    && python -m pip install --constraint /tmp/requirements.cpu.txt ./python \
     && cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml \
     && python -m pip install --no-build-isolation ./sgl-kernel
 
 COPY third_party/tair-kvcache/hisim /opt/src/hisim
 
-RUN python -m pip install numpy scikit-learn xgboost \
-    && python -m pip install \
+RUN python -m pip install --constraint /tmp/requirements.cpu.txt numpy scikit-learn xgboost
+
+RUN python -m pip install \
         "aiconfigurator @ git+https://github.com/ai-dynamo/aiconfigurator.git@${AICONFIGURATOR_COMMIT}" \
     && python -m pip install --no-deps /opt/src/hisim
 
@@ -56,7 +58,8 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash app \
     && mkdir -p /workspace /home/app/.cache \
     && chown -R app:app /workspace /home/app/.cache
 
-COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
 USER app
 WORKDIR /workspace
