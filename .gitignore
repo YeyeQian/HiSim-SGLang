@@ -1,0 +1,10 @@
+.worktrees/
+.superpowers/
+cache/
+results/
+logs/
+*.log
+*.pid
+*.env.local
+artifacts/h20_aic/
+artifacts/downloads/
