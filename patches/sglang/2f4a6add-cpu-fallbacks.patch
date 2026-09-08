@@ -1,0 +1,62 @@
+From 2f4a6addf3101342498b4528289c6fd053622530 Mon Sep 17 00:00:00 2001
+From: Yibo Cai <yibo.cai@arm.com>
+Date: Sun, 11 Jan 2026 04:27:19 -0800
+Subject: [PATCH] apply upstream non-AMX CPU fallback fixes
+
+Source: sgl-project/sglang commit 2f4a6addf3101342498b4528289c6fd053622530
+Scope: only activation, layernorm, and rotary CPU fallback hunks required by
+the HiSim CPU smoke environment. Unrelated model-runner and utility changes
+from the source commit are intentionally excluded.
+---
+diff --git a/python/sglang/srt/layers/activation.py b/python/sglang/srt/layers/activation.py
+index 8fde6b80fa..4b6f0f18df 100644
+--- a/python/sglang/srt/layers/activation.py
++++ b/python/sglang/srt/layers/activation.py
+@@ -378,15 +378,3 @@ def get_cross_encoder_activation_function(config: PretrainedConfig):
+     else:
+         # adapt bge-reranker
+         return nn.Identity()
+-
+-
+-if not (
+-    _is_cuda or _is_npu or (_is_cpu and _is_cpu_amx_available) or _is_hip or _is_xpu
+-):
+-    logger.info(
+-        "sgl-kernel is not available on Non-NV, Non-AMD platforms or Non-AMX CPUs. Fallback to other kernel libraries."
+-    )
+-    from vllm.model_executor.layers.activation import (  # noqa: F401
+-        GeluAndMul,
+-        SiluAndMul,
+-    )
+diff --git a/python/sglang/srt/layers/layernorm.py b/python/sglang/srt/layers/layernorm.py
+index 7bef9d2abd..9f4c77a76f 100644
+--- a/python/sglang/srt/layers/layernorm.py
++++ b/python/sglang/srt/layers/layernorm.py
+@@ -502,12 +502,3 @@ class Gemma3RMSNorm(MultiPlatformOp):
+ 
+     def extra_repr(self):
+         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+-
+-
+-if not (
+-    _is_cuda or _is_hip or _is_npu or (_is_cpu and _is_cpu_amx_available) or _is_xpu
+-):
+-    logger.info(
+-        "sgl-kernel layernorm implementation is not available on current platform. Fallback to other kernel libraries."
+-    )
+-    from vllm.model_executor.layers.layernorm import GemmaRMSNorm, RMSNorm  # noqa: F401
+diff --git a/python/sglang/srt/layers/rotary_embedding.py b/python/sglang/srt/layers/rotary_embedding.py
+index 9675a7e560..9675a7e560 100644
+--- a/python/sglang/srt/layers/rotary_embedding.py
++++ b/python/sglang/srt/layers/rotary_embedding.py
+@@ -116,7 +116,7 @@ class RotaryEmbedding(MultiPlatformOp):
+ 
+         if (
+             (not (_is_cuda or _is_npu) or self.head_size not in [64, 128, 256, 512])
+-            and not (_is_cpu and _is_cpu_amx_available)
++            and not (_is_cpu)
+             and not (_is_xpu)
+         ):
+             if _is_cuda:
+-- 
+2.43.0
