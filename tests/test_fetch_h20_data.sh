@@ -77,6 +77,7 @@ fake_curl_log="${tmp_dir}/fake-curl.log"
 set +e
 PATH="${fake_bin}:${PATH}" \
   FAKE_CURL_LOG="${fake_curl_log}" \
+  DOCKER_PROJECT_PROXY="http://127.0.0.1:28999" \
   H20_AIC_URL="https://example.invalid/H20_AIC.zip" \
   H20_AIC_SHA256="${bad_sha}" \
   H20_AIC_SIZE=1 \
@@ -89,5 +90,6 @@ test "${retry_status}" -ne 0
 test "$(wc -l <"${fake_curl_log}")" -eq 3
 grep -F -- '--connect-timeout 10' "${fake_curl_log}" >/dev/null
 grep -F -- '--max-time 60' "${fake_curl_log}" >/dev/null
+grep -F -- '--proxy http://127.0.0.1:28999' "${fake_curl_log}" >/dev/null
 
 echo "test_fetch_h20_data.sh: PASS"

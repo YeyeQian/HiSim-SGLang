@@ -250,6 +250,12 @@ printf '{}\n' >"${H20_DATA_DIR}/xgb_models/qwen3_8B/model.json"
 : >"${FAKE_DOCKER_LOG}"
 bash "${root_dir}/scripts/start_server.sh" h20 >/dev/null
 assert_contains "${FAKE_DOCKER_LOG}" "${H20_DATA_DIR}:/opt/hisim-data/aic:ro"
+BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" h20 probe
+h20_bench_dir="$(<"${state_dir}/last-benchmark-probe")"
+assert_contains "${h20_bench_dir}/provenance.json" '"service_kind":"h20"'
+assert_contains "${h20_bench_dir}/provenance.json" '"dataset_profile":"none"'
+assert_contains "${h20_bench_dir}/provenance.json" '"benchmark_profile":"probe"'
+assert_contains "${h20_bench_dir}/provenance.json" '"expected_config_kind":"official_h20_data_path"'
 bash "${root_dir}/scripts/stop_server.sh" >/dev/null
 
 rm "${H20_DATA_DIR}/xgb_models/qwen3_8B/model.json"
@@ -277,6 +283,11 @@ for profile in probe small; do
   [[ -f "${bench_dir}/docker-stats.csv" && -f "${bench_dir}/resource-peak.txt" ]] || fail "${profile} must save resource evidence"
   [[ -f "${bench_dir}/cache-weight-changes.txt" ]] || fail "${profile} must save the cache weight-file scan"
   [[ -f "${bench_dir}/container-inspect.json" ]] || fail "${profile} must save inspect evidence"
+  [[ -f "${bench_dir}/provenance.json" ]] || fail "${profile} must save lifecycle provenance before benchmark execution"
+  assert_contains "${bench_dir}/provenance.json" '"service_kind":"generic"'
+  assert_contains "${bench_dir}/provenance.json" '"dataset_profile":"none"'
+  assert_contains "${bench_dir}/provenance.json" "\"benchmark_profile\":\"${profile}\""
+  assert_contains "${bench_dir}/provenance.json" '"expected_config_kind":"upstream_generic_mock"'
   assert_contains "${FAKE_TIMEOUT_LOG}" 13
   assert_contains "${FAKE_DOCKER_LOG}" 'exec project-container-id /usr/local/bin/entrypoint.sh bench'
   assert_contains "${bench_dir}/command.txt" '--bench-mode simulation'
@@ -321,6 +332,10 @@ export SHAREGPT_SENTINEL_PATH="${state_dir}/sharegpt-attempted"
 BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt
 unset FAKE_EXPECT_SHAREGPT_SENTINEL SHAREGPT_SENTINEL_PATH
 bench_dir="$(<"${state_dir}/last-benchmark-sharegpt")"
+assert_contains "${bench_dir}/provenance.json" '"service_kind":"generic"'
+assert_contains "${bench_dir}/provenance.json" '"dataset_profile":"sharegpt"'
+assert_contains "${bench_dir}/provenance.json" '"benchmark_profile":"sharegpt"'
+assert_contains "${bench_dir}/provenance.json" '"expected_config_kind":"sharegpt_workload_shape"'
 assert_contains "${bench_dir}/command.txt" '--dataset-name sharegpt'
 assert_contains "${bench_dir}/command.txt" '--dataset-path /opt/hisim-data/sharegpt.json'
 assert_contains "${bench_dir}/command.txt" '--num-prompts 16'

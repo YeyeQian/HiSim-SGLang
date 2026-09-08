@@ -8,7 +8,7 @@
 
 ## 1. 最终结论
 
-本服务器已用 Docker 完成 CPU-only HiSim → SGLang HTTP → benchmark 全链路验证。generic、固定 H20 数据路径和可选 ShareGPT workload 均有成功的 benchmark 与规范化 validator 证据；未观察到真实模型权重加载、真实 model forward、CUDA 初始化或 NCCL communicator 初始化。
+本服务器已用 Docker 完成 CPU-only HiSim → SGLang HTTP → benchmark 全链路验证。generic、固定 H20 数据路径和可选 ShareGPT workload 均有成功的 benchmark 与规范化 validator 证据；未观察到真实模型权重加载、真实 model forward、CUDA 初始化或 NCCL communicator 初始化。最终 validator 不再接受 CLI 自报类别：benchmark lifecycle 会在 Docker exec 前写入 `provenance.json`，validator 强制加载并交叉校验 service、dataset、profile 和固定结果类别映射。
 
 结论边界必须保留：
 
@@ -87,6 +87,8 @@ H20 archive：
 - archive：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/downloads/H20_AIC.zip`
 - 解压 root：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/h20_aic/aic`
 
+H20 downloader 通过 `proxy_url` 把项目代理显式传给 curl，同时保留 10 秒 connect timeout、60 秒 transfer timeout、三次有限尝试、TLS 校验、size/SHA 校验和原子安装。fixture 测试验证了精确的 `--proxy` 参数转发。
+
 ShareGPT：
 
 - URL：`https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json`
@@ -98,7 +100,7 @@ ShareGPT 下载通过宿主机代理完成；再次运行 downloader 会重新�
 
 ## 5. 已完成 benchmark 结果
 
-所有表中 benchmark 和 validator exit code 均为 `0`，failed 均为 `0`。
+所有表中 benchmark 和当时 validator exit code 均为 `0`，failed 均为 `0`。Task 7、Task 8 和 ShareGPT 行是 provenance 加固前的历史运行证据；其原始指标、runtime guard 和资源证据仍保留，但最终类别信任边界由 Task 9 review-fix 后重新执行的 fresh generic/H20 以及新静态 lifecycle 测试覆盖。按审查要求未重新执行 ShareGPT live，也未重新下载数据；后续 ShareGPT 运行会自动生成并必须验证 provenance sidecar。
 
 | 类别/profile | completed | duration (s) | req/s | TTFT (ms) | TPOT (ms) | ITL (ms) | peak memory (MiB) | 结果目录 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -107,17 +109,17 @@ ShareGPT 下载通过宿主机代理完成；再次运行 downloader 会重新�
 | H20 probe（Task 8） | 2 | 0.0336894602 | 59.3657478176 | 7.3329150280 | 6.5891363000 | 6.5891363000 | 4211.71 | `results/20260908T134826Z-h20-79823` |
 | H20 small（Task 8） | 16 | 0.5184791489 | 30.8594859297 | 288.8259986451 | 7.6965935509 | 7.6924111978 | 4224.00 | `results/20260908T135531Z-h20-74386` |
 | ShareGPT（可选） | 16 | 3.8249078712 | 4.1831072901 | 197.7838956877 | 6.9561259396 | 6.9371336225 | 5056.51 | `results/20260908T143438Z-generic-29090` |
-| fresh generic probe（Task 9） | 2 | 0.0339596583 | 58.8934076764 | 7.3445949815 | 6.6537658262 | 6.6537658262 | 3910.66 | `results/20260908T151037Z-generic-22574` |
-| fresh H20 probe（Task 9） | 2 | 0.0336894602 | 59.3657478176 | 7.3329150280 | 6.5891363000 | 6.5891363000 | 4244.48 | `results/20260908T151422Z-h20-29764` |
+| fresh generic probe（provenance 加固后） | 2 | 0.0339596583 | 58.8934076764 | 7.3445949815 | 6.6537658262 | 6.6537658262 | 3924.99 | `results/20260908T153202Z-generic-57411` |
+| fresh H20 probe（provenance 加固后） | 2 | 0.0336894602 | 59.3657478176 | 7.3329150280 | 6.5891363000 | 6.5891363000 | 4219.90 | `results/20260908T153458Z-h20-63247` |
 
 fresh 结果的 benchmark 绝对目录：
 
 ```text
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T151037Z-generic-22574/benchmark/generic/probe/20260908T151300593719624-27193
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T151422Z-h20-29764/benchmark/h20/probe/20260908T151617173568195-58470
+/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T153202Z-generic-57411/benchmark/generic/probe/20260908T153341080418171-60934
+/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T153458Z-h20-63247/benchmark/h20/probe/20260908T153748540073386-22337
 ```
 
-两次 fresh probe 的 cache 均从 `15560 KiB` 变为 `15560 KiB`，delta 为 `0 KiB`；`cache-weight-changes.txt` 均为 0 bytes。ShareGPT 成功运行的 cache delta 也为 `0 KiB`。每个最终服务日志均包含 HiSim config、mock ModelRunner、request barrier 和 simulation results marker；fresh generic 加载 `h100_sxm/sglang/0.5.6.post2`，fresh H20 加载 `h20_sxm/sglang/0.5.6.post2`。禁止运行路径扫描没有命中，且不存在 `guard-failure.txt`。
+两次 provenance 加固后的 fresh probe 均带有执行前生成的 sidecar。generic 映射为 `generic / none / probe / upstream_generic_mock`，H20 映射为 `h20 / none / probe / official_h20_data_path`；两次 validator 都加载 sidecar 后退出 0。cache 均从 `15560 KiB` 变为 `15560 KiB`，delta 为 `0 KiB`；`cache-weight-changes.txt` 均为 0 bytes。ShareGPT 成功运行的 cache delta 也为 `0 KiB`。每个最终服务日志均包含 HiSim config、mock ModelRunner、request barrier 和 simulation results marker；fresh generic 加载 `h100_sxm/sglang/0.5.6.post2`，fresh H20 加载 `h20_sxm/sglang/0.5.6.post2`。禁止运行路径扫描没有命中，且不存在 `guard-failure.txt`。
 
 每个 fresh profile 都使用独立容器。验证后 exact service container 被 stop/remove，active state 目录不存在，`127.0.0.1:30000` 无监听。镜像、cache、数据、日志和结果均保留。
 
@@ -132,13 +134,14 @@ bash scripts/inspect_image.sh
 git submodule status --recursive
 ```
 
-Task 9 fresh 记录：聚合测试 `0`、preflight `0`、image inspection `0`；19 个 Python unit tests 和全部 `tests/test_*.sh` 通过。submodule status 精确报告上述两个固定 commits。日志目录：
+Task 9 review-fix 记录：聚合测试 `0`、preflight `0`、image inspection `0`；20 个 Python unit tests 和全部 `tests/test_*.sh` 通过。新增测试明确证明：缺失 provenance 会被拒绝；unlabeled generic-shaped metrics 即使 CLI 声明为 H20 也会被拒绝；三类 lifecycle 映射 sidecar 正确；H20 curl 精确接收项目代理。submodule status 精确报告上述两个固定 commits。日志目录：
 
 ```text
 /data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9/
+/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9-review-fix/
 ```
 
-fresh generic 与 H20 都依次执行 `start_server.sh`、`wait_ready.sh`、`run_benchmark.sh ... probe`、`validate_results.py` 和 `stop_server.sh`，各阶段退出码为 0。具体可复现命令见根目录 `README.md`。
+fresh generic 与 H20 都依次执行 `start_server.sh`、`wait_ready.sh`、`run_benchmark.sh ... probe`、带 `--provenance` 的 `validate_results.py` 和 `stop_server.sh`，各阶段退出码为 0。具体可复现命令见根目录 `README.md`。
 
 ## 7. 资源与网络约束
 

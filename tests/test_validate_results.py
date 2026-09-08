@@ -27,16 +27,44 @@ class ValidateResultsTest(unittest.TestCase):
             "mean_itl_ms": 1.5,
         }
 
-    def run_validator(self, metrics, profile="probe", config_kind="upstream_generic_mock"):
+    @staticmethod
+    def provenance(
+        service_kind="generic",
+        dataset_profile="none",
+        benchmark_profile="probe",
+        expected_config_kind="upstream_generic_mock",
+    ):
+        return {
+            "schema_version": 1,
+            "service_kind": service_kind,
+            "dataset_profile": dataset_profile,
+            "benchmark_profile": benchmark_profile,
+            "expected_config_kind": expected_config_kind,
+        }
+
+    def run_validator(
+        self,
+        metrics,
+        profile="probe",
+        config_kind="upstream_generic_mock",
+        provenance=None,
+    ):
         metrics_path = self.work / "metrics.json"
+        provenance_path = self.work / "provenance.json"
         summary_path = self.work / "validation.json"
         metrics_path.write_text(json.dumps(metrics) + "\n", encoding="utf-8")
+        if provenance is None:
+            provenance = self.provenance(benchmark_profile=profile)
+        if provenance is not False:
+            provenance_path.write_text(json.dumps(provenance) + "\n", encoding="utf-8")
         result = subprocess.run(
             [
                 sys.executable,
                 str(VALIDATOR),
                 "--metrics",
                 str(metrics_path),
+                "--provenance",
+                str(provenance_path),
                 "--profile",
                 profile,
                 "--config-kind",
@@ -92,6 +120,11 @@ class ValidateResultsTest(unittest.TestCase):
             self.valid_metrics(16),
             profile="sharegpt",
             config_kind="sharegpt_workload_shape",
+            provenance=self.provenance(
+                dataset_profile="sharegpt",
+                benchmark_profile="sharegpt",
+                expected_config_kind="sharegpt_workload_shape",
+            ),
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(summary["profile"], "sharegpt")
@@ -114,7 +147,12 @@ class ValidateResultsTest(unittest.TestCase):
 
     def test_accepts_official_h20_data_path_as_integration_only(self):
         result, summary = self.run_validator(
-            self.valid_metrics(), config_kind="official_h20_data_path"
+            self.valid_metrics(),
+            config_kind="official_h20_data_path",
+            provenance=self.provenance(
+                service_kind="h20",
+                expected_config_kind="official_h20_data_path",
+            ),
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(summary["config_kind"], "official_h20_data_path")
@@ -123,12 +161,34 @@ class ValidateResultsTest(unittest.TestCase):
     def test_rejects_h20_result_claiming_independent_calibration(self):
         metrics = self.valid_metrics()
         metrics["calibration_status"] = "CALIBRATED"
-        self.assert_rejected(metrics, config_kind="official_h20_data_path")
+        result, _ = self.run_validator(
+            metrics,
+            config_kind="official_h20_data_path",
+            provenance=self.provenance(
+                service_kind="h20",
+                expected_config_kind="official_h20_data_path",
+            ),
+        )
+        self.assertNotEqual(result.returncode, 0)
 
     def test_rejects_generic_h20_cross_labeling(self):
         metrics = self.valid_metrics()
         metrics["config_kind"] = "upstream_generic_mock"
         self.assert_rejected(metrics, config_kind="official_h20_data_path")
+
+    def test_rejects_unlabeled_generic_metrics_claimed_as_h20_by_cli(self):
+        result, _ = self.run_validator(
+            self.valid_metrics(),
+            config_kind="official_h20_data_path",
+            provenance=self.provenance(),
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("validation failed:", result.stderr)
+
+    def test_rejects_missing_lifecycle_provenance(self):
+        result, _ = self.run_validator(self.valid_metrics(), provenance=False)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("validation failed:", result.stderr)
 
     def test_rejects_missing_required_metric(self):
         metrics = self.valid_metrics()
@@ -176,12 +236,17 @@ class ValidateResultsTest(unittest.TestCase):
         summary_path = self.work / "validation.json"
         line = json.dumps(self.valid_metrics())
         metrics_path.write_text(f"{line}\n{line}\n", encoding="utf-8")
+        (self.work / "provenance.json").write_text(
+            json.dumps(self.provenance()) + "\n", encoding="utf-8"
+        )
         result = subprocess.run(
             [
                 sys.executable,
                 str(VALIDATOR),
                 "--metrics",
                 str(metrics_path),
+                "--provenance",
+                str(self.work / "provenance.json"),
                 "--profile",
                 "probe",
                 "--config-kind",

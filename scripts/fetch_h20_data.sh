@@ -13,6 +13,7 @@ source "${repo_root}/configs/versions.env"
 url="${H20_AIC_URL:-https://raw.githubusercontent.com/kunluninsight/LatencyPrism/d242ca5b8d7217e1d235d2fb225ff4a8ba24995a/Hisim/Data/H20_AIC.zip}"
 expected_sha="${sha_override:-${H20_AIC_SHA256}}"
 expected_size="${H20_AIC_SIZE:-9039139}"
+selected_proxy="$(proxy_url)"
 archive="${H20_AIC_ARCHIVE:-${repo_root}/artifacts/downloads/H20_AIC.zip}"
 asset_dir="${H20_AIC_DIR:-${repo_root}/artifacts/h20_aic}"
 data_relative="aic/data/h20_sxm/sglang/0.5.6.post2"
@@ -79,6 +80,7 @@ if [[ "${actual_sha}" != "${expected_sha}" ]]; then
   for attempt in 1 2 3; do
     rm -f -- "${partial}"
     if curl --fail --location --silent --show-error \
+      --proxy "${selected_proxy}" \
       --connect-timeout 10 --max-time 60 \
       --output "${partial}" "${url}"; then
       downloaded=1

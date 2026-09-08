@@ -48,6 +48,7 @@ bash scripts/run_benchmark.sh generic probe
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-probe)"
 python3 scripts/validate_results.py \
   --metrics "${bench_dir}/metrics.json" \
+  --provenance "${bench_dir}/provenance.json" \
   --profile probe \
   --config-kind upstream_generic_mock \
   --output "${bench_dir}/validation.json"
@@ -63,6 +64,7 @@ bash scripts/run_benchmark.sh generic small
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-small)"
 python3 scripts/validate_results.py \
   --metrics "${bench_dir}/metrics.json" \
+  --provenance "${bench_dir}/provenance.json" \
   --profile small \
   --config-kind upstream_generic_mock \
   --output "${bench_dir}/validation.json"
@@ -82,6 +84,7 @@ bash scripts/run_benchmark.sh h20 probe
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-probe)"
 python3 scripts/validate_results.py \
   --metrics "${bench_dir}/metrics.json" \
+  --provenance "${bench_dir}/provenance.json" \
   --profile probe \
   --config-kind official_h20_data_path \
   --output "${bench_dir}/validation.json"
@@ -102,6 +105,7 @@ bash scripts/run_benchmark.sh generic sharegpt
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-sharegpt)"
 python3 scripts/validate_results.py \
   --metrics "${bench_dir}/metrics.json" \
+  --provenance "${bench_dir}/provenance.json" \
   --profile sharegpt \
   --config-kind sharegpt_workload_shape \
   --output "${bench_dir}/validation.json"
@@ -127,6 +131,7 @@ bash scripts/stop_server.sh
 保留的产物：
 
 - `results/<UTC-run-id>/`：服务日志、Docker inspect、benchmark 命令、原始指标、验证结果、资源采样和 cache 差异。
+- 每个 benchmark 目录的 `provenance.json`：由 lifecycle 在执行 benchmark 前写入的 service kind、dataset profile、benchmark profile 与期望结果类别；validator 必须读取并与 CLI 交叉校验。
 - `logs/`：构建、TDD 和阶段验证日志。
 - `cache/huggingface/`：Qwen3-8B config/tokenizer 缓存；不包含主动下载的完整权重。
 - `artifacts/h20_aic/` 与 `artifacts/downloads/H20_AIC.zip`：H20 数据与 archive。

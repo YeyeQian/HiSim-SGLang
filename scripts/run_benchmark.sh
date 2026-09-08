@@ -75,6 +75,23 @@ server_dir="${run_dir}/server/${kind}"
 mkdir -p "${bench_dir}" "${cache_dir}"
 chmod 0777 "${bench_dir}"
 printf '%s\n' "${bench_dir}" >"${state_dir}/last-benchmark-${profile}"
+case "${kind}:${active_dataset_profile}:${profile}" in
+  generic:none:probe | generic:none:small)
+    expected_config_kind=upstream_generic_mock
+    ;;
+  h20:none:probe | h20:none:small)
+    expected_config_kind=official_h20_data_path
+    ;;
+  generic:sharegpt:sharegpt)
+    expected_config_kind=sharegpt_workload_shape
+    ;;
+  *)
+    die "unsupported lifecycle provenance: service=${kind}, dataset=${active_dataset_profile}, benchmark=${profile}"
+    ;;
+esac
+printf '{"schema_version":1,"service_kind":"%s","dataset_profile":"%s","benchmark_profile":"%s","expected_config_kind":"%s"}\n' \
+  "${kind}" "${active_dataset_profile}" "${profile}" "${expected_config_kind}" \
+  >"${bench_dir}/provenance.json"
 guard_failure="${server_dir}/runtime-guard-failure.txt"
 if [[ -s "${guard_failure}" ]]; then
   cp "${guard_failure}" "${bench_dir}/guard-failure.txt"
