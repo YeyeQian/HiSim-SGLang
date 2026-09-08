@@ -16,6 +16,9 @@ port="${HISIM_PORT:-30000}"
 results_root="${RESULTS_ROOT:-${repo_root}/results}"
 cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
 state_dir="${results_root}/.state/${container_name}"
+metadata_timeout="${MODEL_METADATA_TIMEOUT_SECONDS:-300}"
+[[ "${metadata_timeout}" =~ ^[1-9][0-9]*$ ]] ||
+  die "model metadata timeout must be a positive integer"
 
 case "${kind}" in
   generic)
@@ -45,6 +48,35 @@ runtime_gid=10001
 chmod 0777 "${cache_dir}" "${run_dir}"
 du -sk -- "${cache_dir}" >"${server_dir}/cache-before.txt"
 
+# Download only public model configuration and tokenizer assets while host
+# networking can reach the host-loopback proxy. The serving container remains
+# bridge-networked and uses this cache offline; no model class is instantiated.
+proxy="$(proxy_url)"
+metadata_code='from transformers import AutoConfig, AutoTokenizer; model="Qwen/Qwen3-8B"; AutoConfig.from_pretrained(model); AutoTokenizer.from_pretrained(model)'
+metadata_args=(
+  run --rm
+  --name "${container_name}"
+  --network host
+  --user "${runtime_uid}:${runtime_gid}"
+  --env "HTTP_PROXY=${proxy}"
+  --env "HTTPS_PROXY=${proxy}"
+  --env "http_proxy=${proxy}"
+  --env "https_proxy=${proxy}"
+  --volume "${cache_dir}:/home/app/.cache/huggingface:rw"
+  "${image}" shell -c "python -c '${metadata_code}'"
+)
+printf '%q ' timeout "${metadata_timeout}s" docker "${metadata_args[@]}" >"${server_dir}/metadata-command.txt"
+printf '\n' >>"${server_dir}/metadata-command.txt"
+set +e
+timeout "${metadata_timeout}s" docker "${metadata_args[@]}" \
+  >"${server_dir}/metadata.stdout.log" 2>"${server_dir}/metadata.stderr.log"
+metadata_status=$?
+set -e
+printf '%s\n' "${metadata_status}" >"${server_dir}/metadata.exit-code.txt"
+du -sk -- "${cache_dir}" >"${server_dir}/cache-after-metadata.txt"
+[[ "${metadata_status}" -eq 0 ]] ||
+  die "model config/tokenizer preparation failed with status ${metadata_status}; see ${server_dir}/metadata.stderr.log"
+
 docker_args=(
   run --detach
   --name "${container_name}"
@@ -58,6 +90,8 @@ docker_args=(
   --env MODEL_PATH=Qwen/Qwen3-8B
   --env HOST=0.0.0.0
   --env PORT=30000
+  --env HF_HUB_OFFLINE=1
+  --env TRANSFORMERS_OFFLINE=1
   --volume "${repo_root}/third_party/tair-kvcache:/workspace/tair-kvcache:ro"
   --volume "${config_path}:/run/hisim/config.json:ro"
   --volume "${cache_dir}:/home/app/.cache/huggingface:rw"

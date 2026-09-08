@@ -110,6 +110,12 @@ done
 
 : >"${FAKE_DOCKER_LOG}"
 bash "${root_dir}/scripts/start_server.sh" generic
+assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke --network host'
+assert_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY=http://127.0.0.1:17897'
+assert_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY=http://127.0.0.1:17897'
+assert_contains "${FAKE_DOCKER_LOG}" 'AutoConfig.from_pretrained'
+assert_contains "${FAKE_DOCKER_LOG}" 'AutoTokenizer.from_pretrained'
+assert_not_contains "${FAKE_DOCKER_LOG}" 'AutoModel.from_pretrained'
 assert_contains "${FAKE_DOCKER_LOG}" 'run --detach'
 assert_contains "${FAKE_DOCKER_LOG}" '--cpus 16'
 assert_contains "${FAKE_DOCKER_LOG}" '--memory 32g'
@@ -120,7 +126,7 @@ assert_contains "${FAKE_DOCKER_LOG}" '--user 10001:10001'
 assert_contains "${FAKE_DOCKER_LOG}" 'third_party/tair-kvcache:/workspace/tair-kvcache:ro'
 assert_contains "${FAKE_DOCKER_LOG}" 'config.json:/run/hisim/config.json:ro'
 assert_contains "${FAKE_DOCKER_LOG}" "${tmp_dir}/cache:/home/app/.cache/huggingface:rw"
-assert_not_contains "${FAKE_DOCKER_LOG}" '--network host'
+assert_contains "${FAKE_DOCKER_LOG}" '--env HF_HUB_OFFLINE=1'
 assert_not_contains "${FAKE_DOCKER_LOG}" '--gpus'
 assert_contains "${root_dir}/scripts/start_server.sh" ':/opt/hisim-data/aic:ro'
 
