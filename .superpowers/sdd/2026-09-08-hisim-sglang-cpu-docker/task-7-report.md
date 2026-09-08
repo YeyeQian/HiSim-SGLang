@@ -17,6 +17,7 @@ CPU-only HiSim → SGLang HTTP → benchmark is proven with the pinned generic m
 - `fd17117` — `fix: materialize AIConfigurator performance data`
 - `dc40ebf` — `fix: materialize complete H100 performance data`
 - `8740a28` — `fix: align offline simulation benchmark profiles`
+- `bbba7fd` — `fix: bound Docker build network retries`
 
 Pinned upstream identities remain unchanged:
 
@@ -59,10 +60,10 @@ The tracked patch `patches/sglang/2f4a6add-cpu-fallbacks.patch` applies only the
 
 `results/20260908T114754Z-generic-94096` reached the HiSim predictor but failed with `KeyError: gemm_dtype`. The installed performance tables were Git LFS pointer text. The final build:
 
-- Downloads Git LFS 3.7.1 with three bounded attempts.
+- Downloads Git LFS 3.7.1 with three attempts, each limited to 60 seconds, deleting any partial tarball before retry.
 - Verifies SHA256 `1c0b6ee5200ca708c5cebebb18fdeb0e1c98f1af5c1a9cba205a4c0ab5a5ec08`.
-- Shallow-clones only `h20e-higher-acc`, whose verified tip equals the pinned AIConfigurator commit.
-- Uses `GIT_LFS_SKIP_SMUDGE=1`, then selectively pulls `src/aiconfigurator/systems/data/h100_sxm/**`.
+- Shallow-clones only `h20e-higher-acc`, whose verified tip equals the pinned AIConfigurator commit, with three 120-second attempts and clone-directory cleanup before each attempt.
+- Uses `GIT_LFS_SKIP_SMUDGE=1`, then selectively pulls `src/aiconfigurator/systems/data/h100_sxm/**` with three 300-second attempts and incomplete-LFS cleanup before each attempt.
 - Requires the H100 directory to exist and rejects every remaining `.txt` LFS pointer before installation and during image inspection.
 
 Build/debug evidence:
@@ -79,6 +80,16 @@ Build/debug evidence:
 - `logs/task7/lfs-build-attempt-10.stdout.log`: complete H100 selective pull, exit 0; final accepted image.
 - `logs/task7/aiconfigurator-shallow-branch-evidence.log`: branch-tip provenance.
 - `logs/task7/h100-image-inspect.stdout.log`: final image inspection, exit 0.
+
+The independent Task 7 review found the original retry counts did not bound the duration of an individual network attempt, and the tracked mail-format patch contained whitespace-only context/signature lines. Commit `bbba7fd` adds focused TDD coverage, finite per-attempt timeouts and cleanup for all three network operations, and rewrites only the affected patch context ranges so the exact three functional upstream hunks remain unchanged. A scoped review then required LFS incomplete-file cleanup to fail closed on real deletion errors and required the tests to lock the audited functional patch semantics. The final implementation uses a POSIX directory guard plus explicit deletion failure exit, and pins stable patch-id `ab5af423a7740bba40e04752e3c54adc747b02fa`. Evidence:
+
+- `logs/task7/network-timeouts-tdd-red.log` / `network-timeouts-tdd-green.log`: expected exit 1 followed by exit 0.
+- `logs/task7/patch-whitespace-tdd-red.log` / `patch-whitespace-tdd-green.log`: expected exit 1 followed by exit 0.
+- `logs/task7/review-fix-round1-lfs-cleanup-red-v3.log` / `review-fix-round1-lfs-cleanup-green.log`: fail-closed LFS cleanup test, expected exit 1 followed by exit 0.
+- `logs/task7/review-fix-round1-patch-id-mutation-red.log` / `review-fix-round1-patch-id-green.log`: semantic mutation rejected, then audited patch accepted.
+- `logs/task7/review-fix-build.stdout.log`: post-fix Docker rebuild, exit 0.
+- `logs/task7/review-fix-inspect.stdout.log`: post-fix image inspection, exit 0; image `sha256:43a15bcf2ef6cd5013bf2154e89776879b1e8eeb7c4540215791f95dc62b877f`.
+- `logs/task7/review-fix-focused.stdout.log`: validator and focused shell/syntax regression suite, exit 0.
 
 Image inspection proves AIConfigurator commit and Git LFS version, materialized H100 data, `torch.cuda.is_available(): False`, absence of `/dev/nvidia*`, and absence of forbidden CUDA/cuDNN/NCCL/FlashInfer distributions. `nvidia-ml-py` remains explicitly allowed as a pure Python NVML telemetry binding; it does not supply NVIDIA computation capability.
 
@@ -132,7 +143,7 @@ Both benchmark `cache-weight-changes.txt` files are empty. Resource evidence exi
 - `bash tests/test_lifecycle_scripts.sh`: passed.
 - Final Docker build and image inspection: exit 0.
 - Validator exits for final probe and small: 0.
-- `git diff --check`: passed before implementation commits.
+- `git diff --check a54337c..HEAD`: passed after the review-fix implementation commit; rerun after this report commit before handoff.
 - Exact service and metadata-helper container queries returned empty after final stop.
 - Port 30000 had no listener after final stop.
 
