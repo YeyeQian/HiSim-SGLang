@@ -134,7 +134,7 @@ bash scripts/inspect_image.sh
 git submodule status --recursive
 ```
 
-Task 9 review-fix 记录：聚合测试 `0`、preflight `0`、image inspection `0`；20 个 Python unit tests 和全部 `tests/test_*.sh` 通过。新增测试明确证明：缺失 provenance 会被拒绝；unlabeled generic-shaped metrics 即使 CLI 声明为 H20 也会被拒绝；三类 lifecycle 映射 sidecar 正确；H20 curl 精确接收项目代理。submodule status 精确报告上述两个固定 commits。日志目录：
+Task 9 review-fix 记录：聚合测试 `0`、preflight `0`、image inspection `0`；21 个 Python unit tests 和全部 `tests/test_*.sh` 通过。新增测试明确证明：缺失 provenance 会被拒绝；unlabeled generic-shaped metrics 即使 CLI 声明为 H20 也会被拒绝；三类 lifecycle 映射 sidecar 正确；H20 curl 精确接收项目代理。submodule status 精确报告上述两个固定 commits。日志目录：
 
 ```text
 /data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9/
