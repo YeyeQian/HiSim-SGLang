@@ -1,0 +1,6 @@
+[submodule "third_party/tair-kvcache"]
+	path = third_party/tair-kvcache
+	url = https://github.com/alibaba/tair-kvcache.git
+[submodule "third_party/sglang"]
+	path = third_party/sglang
+	url = https://github.com/sgl-project/sglang.git
