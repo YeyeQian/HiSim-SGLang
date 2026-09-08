@@ -48,7 +48,7 @@ common_args=(
   --backend sglang
   --base-url http://127.0.0.1:30000
   --model Qwen/Qwen3-8B
-  --dataset-name random
+  --dataset-name random-ids
   --bench-mode simulation
   --warmup-requests 0
   --disable-tqdm
@@ -56,10 +56,10 @@ common_args=(
 )
 case "${profile}" in
   probe)
-    profile_args=(--num-prompts 2 --max-concurrency 1 --random-input-len 16 --random-output-len 8)
+    profile_args=(--num-prompts 2 --max-concurrency 2 --random-input-len 16 --random-output-len 8)
     ;;
   small)
-    profile_args=(--num-prompts 16 --max-concurrency 4 --random-input-len 256 --random-output-len 32)
+    profile_args=(--num-prompts 16 --max-concurrency 16 --random-input-len 256 --random-output-len 32)
     ;;
 esac
 command=(docker exec "${container_id}" /usr/local/bin/entrypoint.sh bench "${common_args[@]}" "${profile_args[@]}")

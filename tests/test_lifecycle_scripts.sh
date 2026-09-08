@@ -219,12 +219,13 @@ for profile in probe small; do
   assert_contains "${FAKE_DOCKER_LOG}" 'exec project-container-id /usr/local/bin/entrypoint.sh bench'
   assert_contains "${bench_dir}/command.txt" '--bench-mode simulation'
   assert_contains "${bench_dir}/command.txt" '--warmup-requests 0'
+  assert_contains "${bench_dir}/command.txt" '--dataset-name random-ids'
   if [[ "${profile}" = probe ]]; then
     assert_contains "${bench_dir}/command.txt" '--num-prompts 2'
-    assert_contains "${bench_dir}/command.txt" '--max-concurrency 1'
+    assert_contains "${bench_dir}/command.txt" '--max-concurrency 2'
   else
     assert_contains "${bench_dir}/command.txt" '--num-prompts 16'
-    assert_contains "${bench_dir}/command.txt" '--max-concurrency 4'
+    assert_contains "${bench_dir}/command.txt" '--max-concurrency 16'
     assert_contains "${bench_dir}/command.txt" '--random-input-len 256'
     assert_contains "${bench_dir}/command.txt" '--random-output-len 32'
   fi
