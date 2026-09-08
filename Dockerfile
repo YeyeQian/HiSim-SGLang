@@ -42,8 +42,8 @@ COPY configs/requirements.cpu.txt /tmp/requirements.cpu.txt
 COPY patches/sglang/2f4a6add-cpu-fallbacks.patch /tmp/sglang-cpu.patch
 
 WORKDIR /opt/src/sglang
-RUN git apply --check /tmp/sglang-cpu.patch \
-    && git apply /tmp/sglang-cpu.patch \
+RUN git apply --check --no-index /tmp/sglang-cpu.patch \
+    && git apply --no-index /tmp/sglang-cpu.patch \
     && cp python/pyproject_cpu.toml python/pyproject.toml \
     && python -m pip install --constraint /tmp/requirements.cpu.txt ./python \
     && cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml \

@@ -30,9 +30,9 @@ git -C "${root_dir}/third_party/sglang" apply --check "${patch_file}" ||
   fail 'patch no longer applies clean to the pinned SGLang source'
 grep -F 'COPY patches/sglang/2f4a6add-cpu-fallbacks.patch /tmp/sglang-cpu.patch' \
   "${root_dir}/Dockerfile" >/dev/null || fail 'Dockerfile does not copy the audited patch'
-grep -F 'git apply --check /tmp/sglang-cpu.patch' "${root_dir}/Dockerfile" >/dev/null ||
+grep -F 'git apply --check --no-index /tmp/sglang-cpu.patch' "${root_dir}/Dockerfile" >/dev/null ||
   fail 'Dockerfile does not fail on patch drift before applying it'
-grep -F 'git apply /tmp/sglang-cpu.patch' "${root_dir}/Dockerfile" >/dev/null ||
+grep -F 'git apply --no-index /tmp/sglang-cpu.patch' "${root_dir}/Dockerfile" >/dev/null ||
   fail 'Dockerfile does not apply the audited patch'
 
 printf 'test_sglang_cpu_patch.sh: PASS\n'
