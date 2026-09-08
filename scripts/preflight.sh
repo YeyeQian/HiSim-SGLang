@@ -24,7 +24,16 @@ if [[ "${selected_proxy}" =~ ^http://([^/:]+):([0-9]+)/?$ ]]; then
 else
   die "unsupported proxy URL '${selected_proxy}'; expected http://HOST:PORT"
 fi
-if ! ss -ltnH "sport = :${proxy_port}" | grep -q .; then
+case "${proxy_host}" in
+  127.0.0.1 | localhost) ;;
+  *) die "unsupported proxy host '${proxy_host}'; expected 127.0.0.1 or localhost" ;;
+esac
+if ! ss -ltnH "sport = :${proxy_port}" | awk -v host="${proxy_host}" -v port="${proxy_port}" '
+  $4 == "0.0.0.0:" port || $4 == "*:" port { found = 1 }
+  host == "127.0.0.1" && $4 == "127.0.0.1:" port { found = 1 }
+  host == "localhost" && ($4 == "127.0.0.1:" port || $4 == "[::1]:" port || $4 == "[::]:" port) { found = 1 }
+  END { exit !found }
+'; then
   die "proxy ${proxy_host}:${proxy_port} is not listening"
 fi
 
