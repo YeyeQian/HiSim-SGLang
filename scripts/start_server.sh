@@ -27,8 +27,15 @@ case "${kind}" in
     ;;
   h20)
     config_path="${repo_root}/configs/h20-qwen3-8b.json"
-    h20_data_dir="${repo_root}/artifacts/h20_aic/aic"
-    [[ -d "${h20_data_dir}" ]] || die "H20 data is missing at ${h20_data_dir}; run scripts/fetch_h20_data.sh first"
+    h20_data_dir="${H20_DATA_DIR:-${repo_root}/artifacts/h20_aic/aic}"
+    h20_backend_dir="${h20_data_dir}/data/h20_sxm/sglang/0.5.6.post2"
+    h20_xgb_dir="${h20_data_dir}/xgb_models/qwen3_8B"
+    [[ -s "${h20_data_dir}/h20_sxm.yaml" ]] &&
+      [[ -d "${h20_backend_dir}" ]] &&
+      [[ -n "$(find "${h20_backend_dir}" -type f -name '*.txt' -size +0c -print -quit)" ]] &&
+      [[ -d "${h20_xgb_dir}" ]] &&
+      [[ -n "$(find "${h20_xgb_dir}" -type f -name '*.json' -size +0c -print -quit)" ]] ||
+      die "H20 data is incomplete at ${h20_data_dir}; run scripts/fetch_h20_data.sh first"
     ;;
 esac
 [[ -f "${config_path}" ]] || die "${kind} config is missing at ${config_path}"

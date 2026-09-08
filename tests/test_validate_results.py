@@ -50,8 +50,12 @@ class ValidateResultsTest(unittest.TestCase):
         summary = json.loads(summary_path.read_text()) if summary_path.exists() else None
         return result, summary
 
-    def assert_rejected(self, metrics, profile="probe"):
-        result, _ = self.run_validator(metrics, profile=profile)
+    def assert_rejected(
+        self, metrics, profile="probe", config_kind="upstream_generic_mock"
+    ):
+        result, _ = self.run_validator(
+            metrics, profile=profile, config_kind=config_kind
+        )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("validation failed:", result.stderr)
 
@@ -82,6 +86,24 @@ class ValidateResultsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(summary["completed"], 16)
         self.assertEqual(summary["failed"], 0)
+
+    def test_accepts_official_h20_data_path_as_integration_only(self):
+        result, summary = self.run_validator(
+            self.valid_metrics(), config_kind="official_h20_data_path"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(summary["config_kind"], "official_h20_data_path")
+        self.assertEqual(summary["calibration_status"], "INTEGRATION_ONLY")
+
+    def test_rejects_h20_result_claiming_independent_calibration(self):
+        metrics = self.valid_metrics()
+        metrics["calibration_status"] = "CALIBRATED"
+        self.assert_rejected(metrics, config_kind="official_h20_data_path")
+
+    def test_rejects_generic_h20_cross_labeling(self):
+        metrics = self.valid_metrics()
+        metrics["config_kind"] = "upstream_generic_mock"
+        self.assert_rejected(metrics, config_kind="official_h20_data_path")
 
     def test_rejects_missing_required_metric(self):
         metrics = self.valid_metrics()

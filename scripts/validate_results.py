@@ -3,7 +3,8 @@
 
 Usage:
   validate_results.py --metrics METRICS.json --profile probe|small \
-    --config-kind upstream_generic_mock --output validation.json
+    --config-kind upstream_generic_mock|official_h20_data_path \
+    --output validation.json
 """
 
 import argparse
@@ -14,6 +15,10 @@ from pathlib import Path
 
 
 EXPECTED_COMPLETED = {"probe": 2, "small": 16}
+CALIBRATION_BY_KIND = {
+    "upstream_generic_mock": "NOT_CALIBRATED",
+    "official_h20_data_path": "INTEGRATION_ONLY",
+}
 METRIC_FIELDS = {
     "duration_s": "duration",
     "request_throughput_req_s": "request_throughput",
@@ -52,8 +57,9 @@ def finite_nonnegative(record, field):
 
 
 def validate(record, profile, config_kind):
-    if config_kind != "upstream_generic_mock":
-        raise ValidationError("generic validation requires config kind upstream_generic_mock")
+    if config_kind not in CALIBRATION_BY_KIND:
+        raise ValidationError(f"unsupported config kind: {config_kind}")
+    expected_calibration = CALIBRATION_BY_KIND[config_kind]
 
     expected = EXPECTED_COMPLETED[profile]
     completed = record.get("completed")
@@ -69,9 +75,11 @@ def validate(record, profile, config_kind):
         raise ValidationError(f"failed requests must equal zero, got {explicit_failed}")
 
     if record.get("config_kind", config_kind) != config_kind:
-        raise ValidationError("generic result is labeled as a different config kind")
-    if record.get("calibration_status", "NOT_CALIBRATED") != "NOT_CALIBRATED":
-        raise ValidationError("generic result must be labeled NOT_CALIBRATED")
+        raise ValidationError("result is labeled as a different config kind")
+    if record.get("calibration_status", expected_calibration) != expected_calibration:
+        raise ValidationError(
+            f"{config_kind} result must be labeled {expected_calibration}"
+        )
 
     normalized = {
         name: finite_nonnegative(record, source)
@@ -84,7 +92,7 @@ def validate(record, profile, config_kind):
         "failed": expected - completed,
         "metrics": normalized,
         "config_kind": config_kind,
-        "calibration_status": "NOT_CALIBRATED",
+        "calibration_status": expected_calibration,
     }
 
 

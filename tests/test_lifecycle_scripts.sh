@@ -192,9 +192,27 @@ assert_contains "${root_dir}/scripts/start_server.sh" 'Load weight end[.]'
 unset FAKE_SERVER_LOGS
 
 rm -rf "${state_dir}"
+export H20_DATA_DIR="${tmp_dir}/h20-data"
 if bash "${root_dir}/scripts/start_server.sh" h20 >/dev/null 2>&1; then
   fail 'h20 start must reject missing Task 8 config/data'
 fi
+
+mkdir -p \
+  "${H20_DATA_DIR}/data/h20_sxm/sglang/0.5.6.post2" \
+  "${H20_DATA_DIR}/xgb_models/qwen3_8B"
+printf 'device: h20_sxm\n' >"${H20_DATA_DIR}/h20_sxm.yaml"
+printf 'table\n' >"${H20_DATA_DIR}/data/h20_sxm/sglang/0.5.6.post2/gemm_perf.txt"
+printf '{}\n' >"${H20_DATA_DIR}/xgb_models/qwen3_8B/model.json"
+: >"${FAKE_DOCKER_LOG}"
+bash "${root_dir}/scripts/start_server.sh" h20 >/dev/null
+assert_contains "${FAKE_DOCKER_LOG}" "${H20_DATA_DIR}:/opt/hisim-data/aic:ro"
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+
+rm "${H20_DATA_DIR}/xgb_models/qwen3_8B/model.json"
+if bash "${root_dir}/scripts/start_server.sh" h20 >/dev/null 2>&1; then
+  fail 'h20 start must reject an empty Qwen3-8B XGB directory'
+fi
+unset H20_DATA_DIR
 
 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
 run_dir="$(<"${state_dir}/run_dir")"
