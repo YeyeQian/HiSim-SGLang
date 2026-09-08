@@ -8,9 +8,9 @@ source "${script_dir}/lib/common.sh"
 kind="${1:-}"
 profile="${2:-}"
 [[ $# -eq 2 && ( "${kind}" = generic || "${kind}" = h20 ) ]] ||
-  die "usage: $0 generic|h20 probe|small"
-[[ "${profile}" = probe || "${profile}" = small ]] ||
-  die "usage: $0 generic|h20 probe|small"
+  die "usage: $0 generic|h20 probe|small|sharegpt"
+[[ "${profile}" = probe || "${profile}" = small || ( "${kind}" = generic && "${profile}" = sharegpt ) ]] ||
+  die "usage: $0 generic|h20 probe|small|sharegpt"
 
 repo_root="$(project_root)"
 container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
@@ -31,6 +31,11 @@ container_id="$(<"${state_dir}/container_id")"
 run_dir="$(<"${state_dir}/run_dir")"
 active_kind="$(<"${state_dir}/kind")"
 [[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
+if [[ "${profile}" = sharegpt ]]; then
+  [[ -s "${state_dir}/dataset_profile" ]] &&
+    [[ "$(<"${state_dir}/dataset_profile")" = sharegpt ]] ||
+    die "active container lacks the verified ShareGPT mount; stop it and run scripts/start_server.sh generic sharegpt"
+fi
 invocation_id="$(date -u +%Y%m%dT%H%M%S%N)-$$"
 bench_dir="${run_dir}/benchmark/${kind}/${profile}/${invocation_id}"
 server_dir="${run_dir}/server/${kind}"
@@ -48,7 +53,6 @@ common_args=(
   --backend sglang
   --base-url http://127.0.0.1:30000
   --model Qwen/Qwen3-8B
-  --dataset-name random-ids
   --bench-mode simulation
   --warmup-requests 0
   --disable-tqdm
@@ -56,10 +60,13 @@ common_args=(
 )
 case "${profile}" in
   probe)
-    profile_args=(--num-prompts 2 --max-concurrency 2 --random-input-len 16 --random-output-len 8)
+    profile_args=(--dataset-name random-ids --num-prompts 2 --max-concurrency 2 --random-input-len 16 --random-output-len 8)
     ;;
   small)
-    profile_args=(--num-prompts 16 --max-concurrency 16 --random-input-len 256 --random-output-len 32)
+    profile_args=(--dataset-name random-ids --num-prompts 16 --max-concurrency 16 --random-input-len 256 --random-output-len 32)
+    ;;
+  sharegpt)
+    profile_args=(--dataset-name sharegpt --dataset-path /opt/hisim-data/sharegpt.json --num-prompts 16 --max-concurrency 16 --seed 1 --sharegpt-context-len 4096)
     ;;
 esac
 command=(docker exec "${container_id}" /usr/local/bin/entrypoint.sh bench "${common_args[@]}" "${profile_args[@]}")

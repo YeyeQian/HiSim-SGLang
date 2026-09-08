@@ -6,10 +6,17 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/lib/common.sh"
 
 kind="${1:-}"
-[[ $# -eq 1 && ( "${kind}" = generic || "${kind}" = h20 ) ]] ||
-  die "usage: $0 generic|h20"
+dataset_profile="${2:-none}"
+[[ ( $# -eq 1 || $# -eq 2 ) && ( "${kind}" = generic || "${kind}" = h20 ) ]] ||
+  die "usage: $0 generic|h20 [sharegpt]"
+[[ "${dataset_profile}" = none || ( "${kind}" = generic && "${dataset_profile}" = sharegpt ) ]] ||
+  die "usage: $0 generic|h20 [sharegpt]"
 
 repo_root="$(project_root)"
+sharegpt_sha_override="${SHAREGPT_SHA256-}"
+sharegpt_size_override="${SHAREGPT_SIZE-}"
+# shellcheck source=/dev/null
+source "${repo_root}/configs/versions.env"
 image="${HISIM_IMAGE:-hisim-sglang-cpu:0.5.6.post2}"
 container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
 metadata_name="${container_name}-metadata"
@@ -39,6 +46,16 @@ case "${kind}" in
     ;;
 esac
 [[ -f "${config_path}" ]] || die "${kind} config is missing at ${config_path}"
+
+if [[ "${dataset_profile}" = sharegpt ]]; then
+  sharegpt_dataset="${SHAREGPT_DATASET:-${repo_root}/artifacts/downloads/ShareGPT_V3_unfiltered_cleaned_split.json}"
+  sharegpt_sha="${sharegpt_sha_override:-${SHAREGPT_SHA256}}"
+  sharegpt_size="${sharegpt_size_override:-${SHAREGPT_SIZE}}"
+  [[ -f "${sharegpt_dataset}" ]] &&
+    [[ "$(stat -c %s "${sharegpt_dataset}")" = "${sharegpt_size}" ]] &&
+    [[ "$(sha256sum "${sharegpt_dataset}" | awk '{print $1}')" = "${sharegpt_sha}" ]] ||
+    die "ShareGPT data is missing or invalid at ${sharegpt_dataset}; run scripts/fetch_sharegpt_data.sh first"
+fi
 
 HISIM_PORT="${port}" bash "${repo_root}/scripts/preflight.sh"
 if docker container inspect "${container_name}" >/dev/null 2>&1; then
@@ -132,6 +149,9 @@ docker_args=(
 if [[ "${kind}" = h20 ]]; then
   docker_args+=(--volume "${h20_data_dir}:/opt/hisim-data/aic:ro")
 fi
+if [[ "${dataset_profile}" = sharegpt ]]; then
+  docker_args+=(--volume "${sharegpt_dataset}:/opt/hisim-data/sharegpt.json:ro")
+fi
 docker_args+=("${image}" server)
 
 {
@@ -142,6 +162,7 @@ docker_args+=("${image}" server)
   printf 'host_port=%q\n' "${port}"
   printf 'started_at=%q\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf 'config_path=%q\n' "${config_path}"
+  printf 'dataset_profile=%q\n' "${dataset_profile}"
   printf 'command='; printf '%q ' docker "${docker_args[@]}"; printf '\n'
 } >"${server_dir}/launch.env"
 
@@ -150,6 +171,7 @@ container_id="$(docker "${docker_args[@]}")"
 printf '%s\n' "${container_id}" >"${state_dir}/container_id"
 printf '%s\n' "${container_name}" >"${state_dir}/container_name"
 printf '%s\n' "${kind}" >"${state_dir}/kind"
+printf '%s\n' "${dataset_profile}" >"${state_dir}/dataset_profile"
 printf '%s\n' "${run_dir}" >"${state_dir}/run_dir"
 
 # This follows server output from the first moment after launch. The pinned

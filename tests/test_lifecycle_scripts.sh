@@ -126,6 +126,36 @@ for script in start_server.sh wait_ready.sh run_benchmark.sh stop_server.sh; do
   [[ -x "${root_dir}/scripts/${script}" ]] || fail "scripts/${script} must exist and be executable"
 done
 
+sharegpt_fixture="${tmp_dir}/sharegpt.json"
+printf '[{"conversations":[{"from":"human","value":"hi"},{"from":"gpt","value":"hello"}]}]\n' >"${sharegpt_fixture}"
+export SHAREGPT_DATASET="${sharegpt_fixture}"
+export SHAREGPT_SIZE="$(stat -c %s "${sharegpt_fixture}")"
+export SHAREGPT_SHA256="$(sha256sum "${sharegpt_fixture}" | awk '{print $1}')"
+
+# ShareGPT is opt-in: a normal generic server has no dataset bind, while the
+# explicit mode validates and mounts the exact host file read-only.
+: >"${FAKE_DOCKER_LOG}"
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+assert_not_contains "${FAKE_DOCKER_LOG}" '/opt/hisim-data/sharegpt.json'
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+
+: >"${FAKE_DOCKER_LOG}"
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+assert_contains "${FAKE_DOCKER_LOG}" "${sharegpt_fixture}:/opt/hisim-data/sharegpt.json:ro"
+state_dir="${RESULTS_ROOT}/.state/hisim-sglang-cpu-smoke"
+test "$(<"${state_dir}/dataset_profile")" = sharegpt
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+
+printf 'invalid\n' >"${sharegpt_fixture}"
+if bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'ShareGPT start must reject a missing or invalid verified dataset'
+fi
+printf '[{"conversations":[{"from":"human","value":"hi"},{"from":"gpt","value":"hello"}]}]\n' >"${sharegpt_fixture}"
+
+if bash "${root_dir}/scripts/start_server.sh" h20 sharegpt >/dev/null 2>&1; then
+  fail 'ShareGPT must remain a separate generic workload-shape profile'
+fi
+
 : >"${FAKE_DOCKER_LOG}"
 bash "${root_dir}/scripts/start_server.sh" generic
 assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke-metadata --network host'
@@ -250,6 +280,28 @@ for profile in probe small; do
 done
 
 first_probe_dir="$(<"${state_dir}/last-benchmark-probe")"
+# A ShareGPT benchmark requires a fresh server explicitly started with the
+# verified mount, and uses the real second turn as the output-length source.
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+if bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt >/dev/null 2>&1; then
+  fail 'ShareGPT benchmark must reject a server without the verified mount'
+fi
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+bash "${root_dir}/scripts/start_server.sh" generic sharegpt >/dev/null
+: >"${FAKE_DOCKER_LOG}"
+BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic sharegpt
+bench_dir="$(<"${state_dir}/last-benchmark-sharegpt")"
+assert_contains "${bench_dir}/command.txt" '--dataset-name sharegpt'
+assert_contains "${bench_dir}/command.txt" '--dataset-path /opt/hisim-data/sharegpt.json'
+assert_contains "${bench_dir}/command.txt" '--num-prompts 16'
+assert_contains "${bench_dir}/command.txt" '--max-concurrency 16'
+assert_contains "${bench_dir}/command.txt" '--seed 1'
+assert_contains "${bench_dir}/command.txt" '--sharegpt-context-len 4096'
+assert_not_contains "${bench_dir}/command.txt" '--sharegpt-output-len'
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+
 BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null
 second_probe_dir="$(<"${state_dir}/last-benchmark-probe")"
 [[ "${first_probe_dir}" != "${second_probe_dir}" ]] || fail 'benchmark invocations must use unique evidence directories'

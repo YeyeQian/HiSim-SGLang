@@ -2,8 +2,8 @@
 """Validate one pinned HiSim serving benchmark JSONL record.
 
 Usage:
-  validate_results.py --metrics METRICS.json --profile probe|small \
-    --config-kind upstream_generic_mock|official_h20_data_path \
+  validate_results.py --metrics METRICS.json --profile probe|small|sharegpt \
+    --config-kind upstream_generic_mock|official_h20_data_path|sharegpt_workload_shape \
     --output validation.json
 """
 
@@ -14,10 +14,11 @@ import sys
 from pathlib import Path
 
 
-EXPECTED_COMPLETED = {"probe": 2, "small": 16}
+EXPECTED_COMPLETED = {"probe": 2, "small": 16, "sharegpt": 16}
 CALIBRATION_BY_KIND = {
     "upstream_generic_mock": "NOT_CALIBRATED",
     "official_h20_data_path": "INTEGRATION_ONLY",
+    "sharegpt_workload_shape": "WORKLOAD_SHAPE_ONLY",
 }
 METRIC_FIELDS = {
     "duration_s": "duration",
@@ -60,6 +61,10 @@ def validate(record, profile, config_kind):
     if config_kind not in CALIBRATION_BY_KIND:
         raise ValidationError(f"unsupported config kind: {config_kind}")
     expected_calibration = CALIBRATION_BY_KIND[config_kind]
+    if (profile == "sharegpt") != (config_kind == "sharegpt_workload_shape"):
+        raise ValidationError(
+            "ShareGPT profile and sharegpt_workload_shape kind must be used together"
+        )
 
     expected = EXPECTED_COMPLETED[profile]
     completed = record.get("completed")

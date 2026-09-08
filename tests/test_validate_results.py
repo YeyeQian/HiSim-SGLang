@@ -87,6 +87,31 @@ class ValidateResultsTest(unittest.TestCase):
         self.assertEqual(summary["completed"], 16)
         self.assertEqual(summary["failed"], 0)
 
+    def test_accepts_sharegpt_only_as_workload_shape_integration(self):
+        result, summary = self.run_validator(
+            self.valid_metrics(16),
+            profile="sharegpt",
+            config_kind="sharegpt_workload_shape",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(summary["profile"], "sharegpt")
+        self.assertEqual(summary["config_kind"], "sharegpt_workload_shape")
+        self.assertEqual(summary["calibration_status"], "WORKLOAD_SHAPE_ONLY")
+
+    def test_rejects_sharegpt_as_generic_calibrated_result(self):
+        self.assert_rejected(
+            self.valid_metrics(16),
+            profile="sharegpt",
+            config_kind="upstream_generic_mock",
+        )
+
+    def test_rejects_sharegpt_kind_for_synthetic_profile(self):
+        self.assert_rejected(
+            self.valid_metrics(),
+            profile="probe",
+            config_kind="sharegpt_workload_shape",
+        )
+
     def test_accepts_official_h20_data_path_as_integration_only(self):
         result, summary = self.run_validator(
             self.valid_metrics(), config_kind="official_h20_data_path"
