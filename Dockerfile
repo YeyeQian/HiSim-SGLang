@@ -79,9 +79,9 @@ RUN for attempt in 1 2 3; do \
       test "${attempt}" -lt 3 || exit 1; \
     done \
     && GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}" \
-    && git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2/**' \
+    && git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/**' \
     && git -C /opt/src/aiconfigurator rev-parse HEAD | grep -Fx "${AICONFIGURATOR_COMMIT}" \
-    && aic_data_dir=/opt/src/aiconfigurator/src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2 \
+    && aic_data_dir=/opt/src/aiconfigurator/src/aiconfigurator/systems/data/h100_sxm \
     && test -d "${aic_data_dir}" \
     && ! grep -RIl --include='*.txt' '^version https://git-lfs.github.com/spec/v1$' \
         "${aic_data_dir}" \

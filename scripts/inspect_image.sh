@@ -93,7 +93,7 @@ if [ "${actual_commit}" != "${EXPECTED_AICONFIGURATOR_COMMIT}" ]; then
   echo "unexpected AIConfigurator commit: ${actual_commit}" >&2
   exit 1
 fi
-data_dir=/opt/venv/lib/python3.10/site-packages/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2
+data_dir=/opt/venv/lib/python3.10/site-packages/aiconfigurator/systems/data/h100_sxm
 if [ ! -d "${data_dir}" ]; then
   echo "AIConfigurator installed performance data is missing: ${data_dir}" >&2
   exit 1

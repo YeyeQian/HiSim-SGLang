@@ -47,7 +47,7 @@ require_literal "${dockerfile}" 'GIT_LFS_SKIP_SMUDGE=1'
 require_literal "${dockerfile}" 'rm -rf /opt/src/aiconfigurator'
 require_literal "${dockerfile}" 'for attempt in 1 2 3'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}"'
-require_literal "${dockerfile}" "git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/sglang/0.5.6.post2/**'"
+require_literal "${dockerfile}" "git -C /opt/src/aiconfigurator lfs pull --include='src/aiconfigurator/systems/data/h100_sxm/**'"
 require_literal "${dockerfile}" 'test -d "${aic_data_dir}"'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator rev-parse HEAD'
 require_literal "${dockerfile}" 'grep -RIl'
