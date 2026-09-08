@@ -38,6 +38,11 @@ run_id="$(date -u +%Y%m%dT%H%M%SZ)-${kind}-$$"
 run_dir="${results_root}/${run_id}"
 server_dir="${run_dir}/server/${kind}"
 mkdir -p "${cache_dir}" "${server_dir}" "${state_dir}"
+# Keep the image's fixed non-root app identity. Only the two project-owned bind
+# roots are made writable so UID 10001 can create cache and result artifacts.
+runtime_uid=10001
+runtime_gid=10001
+chmod 0777 "${cache_dir}" "${run_dir}"
 du -sk -- "${cache_dir}" >"${server_dir}/cache-before.txt"
 
 docker_args=(
@@ -48,17 +53,18 @@ docker_args=(
   --shm-size 4g
   --network bridge
   --publish "127.0.0.1:${port}:30000"
+  --user "${runtime_uid}:${runtime_gid}"
   --env HISIM_CONFIG_PATH=/run/hisim/config.json
   --env MODEL_PATH=Qwen/Qwen3-8B
   --env HOST=0.0.0.0
   --env PORT=30000
   --volume "${repo_root}/third_party/tair-kvcache:/workspace/tair-kvcache:ro"
   --volume "${config_path}:/run/hisim/config.json:ro"
-  --volume "${cache_dir}:/root/.cache/huggingface:rw"
+  --volume "${cache_dir}:/home/app/.cache/huggingface:rw"
   --volume "${run_dir}:/results:rw"
 )
 if [[ "${kind}" = h20 ]]; then
-  docker_args+=(--volume "${h20_data_dir}:/run/hisim/h20:ro")
+  docker_args+=(--volume "${h20_data_dir}:/opt/hisim-data/aic:ro")
 fi
 docker_args+=("${image}" server)
 
@@ -79,6 +85,24 @@ printf '%s\n' "${container_id}" >"${state_dir}/container_id"
 printf '%s\n' "${container_name}" >"${state_dir}/container_name"
 printf '%s\n' "${kind}" >"${state_dir}/kind"
 printf '%s\n' "${run_dir}" >"${state_dir}/run_dir"
+
+# This follows server output from the first moment after launch. The pinned
+# SGLang weight messages are intentionally included; metadata/tokenizer fetches
+# are not guard conditions.
+guard_pattern='Load weight begin[.]|Load weight end[.]|Loading checkpoint shards|Loading safetensors checkpoint|Loading model weights|Weights loaded into memory|Executing real model forward|ModelRunner[.]forward|Forward pass started|CUDA (runtime )?initialized|Initializing CUDA|torch[.]cuda[.]init|NCCL communicator'
+guard_log="${server_dir}/runtime-guard.log"
+guard_failure="${server_dir}/runtime-guard-failure.txt"
+: >"${guard_log}"
+(
+  docker logs --follow "${container_id}" 2>&1 | while IFS= read -r log_line; do
+    printf '%s\n' "${log_line}" >>"${guard_log}"
+    if printf '%s\n' "${log_line}" | grep -E "${guard_pattern}" >/dev/null; then
+      printf 'Forbidden runtime indicator: %s\n' "${log_line}" >"${guard_failure}"
+      bash "${repo_root}/scripts/stop_server.sh" >/dev/null 2>&1 || true
+      exit 90
+    fi
+  done
+) </dev/null >/dev/null 2>&1 &
 
 printf 'Started %s as %s (%s); evidence: %s\n' \
   "${kind}" "${container_name}" "${container_id}" "${server_dir}"

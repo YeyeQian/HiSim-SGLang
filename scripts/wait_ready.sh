@@ -23,6 +23,7 @@ kind="$(<"${state_dir}/kind")"
 server_dir="${run_dir}/server/${kind}"
 endpoint="http://127.0.0.1:${port}/health"
 readiness_log="${server_dir}/readiness.log"
+guard_failure="${server_dir}/runtime-guard-failure.txt"
 mkdir -p "${server_dir}"
 printf 'endpoint=%s timeout_seconds=%s interval_seconds=%s\n' \
   "${endpoint}" "${timeout_seconds}" "${interval_seconds}" >"${readiness_log}"
@@ -35,6 +36,11 @@ capture_failure() {
 
 start_epoch="$(date +%s)"
 while :; do
+  if [[ -s "${guard_failure}" ]]; then
+    printf 'runtime guard failed before readiness\n' >>"${readiness_log}"
+    bash "${repo_root}/scripts/stop_server.sh" >/dev/null 2>&1 || true
+    exit 90
+  fi
   running="$(docker inspect --format '{{.State.Running}}' "${container_id}" 2>/dev/null || printf false)"
   if [[ "${running}" != true ]]; then
     status="$(docker inspect --format '{{.State.Status}}' "${container_id}" 2>/dev/null || printf unknown)"
@@ -45,6 +51,11 @@ while :; do
   fi
 
   if curl --fail --silent --show-error --connect-timeout 2 --max-time 5 "${endpoint}" >/dev/null; then
+    if [[ -s "${guard_failure}" ]]; then
+      printf 'runtime guard failed during readiness\n' >>"${readiness_log}"
+      bash "${repo_root}/scripts/stop_server.sh" >/dev/null 2>&1 || true
+      exit 90
+    fi
     printf 'ready_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"${readiness_log}"
     printf 'SGLang is ready at %s\n' "${endpoint}"
     exit 0

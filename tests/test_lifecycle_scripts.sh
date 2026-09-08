@@ -39,8 +39,20 @@ case "${1:-} ${2:-}" in
     ;;
   'inspect project-container-id') echo '{"Id":"project-container-id","Name":"/hisim-sglang-cpu-smoke"}' ;;
   'logs project-container-id') printf '%s\n' "${FAKE_SERVER_LOGS:-HiSim simulation hook enabled}" ;;
+  'logs --follow')
+    if [[ -n "${FAKE_FOLLOW_WAIT_FILE:-}" ]]; then
+      while [[ ! -s "${FAKE_FOLLOW_WAIT_FILE}" ]]; do sleep 0.01; done
+      cat "${FAKE_FOLLOW_WAIT_FILE}"
+    else
+      printf '%s\n' "${FAKE_SERVER_LOGS:-HiSim simulation hook enabled}"
+    fi
+    ;;
   'stats --no-stream') echo '12.00%,100MiB / 32GiB,1KiB / 2KiB,3' ;;
   'exec project-container-id')
+    if [[ "${FAKE_BENCH_TRIGGER_GUARD:-0}" = 1 ]]; then
+      printf '%s\n' 'Load weight end.' >"${FAKE_FOLLOW_WAIT_FILE}"
+      sleep 0.1
+    fi
     echo benchmark-stdout
     echo benchmark-stderr >&2
     exit "${FAKE_BENCH_EXIT:-0}"
@@ -104,17 +116,20 @@ assert_contains "${FAKE_DOCKER_LOG}" '--memory 32g'
 assert_contains "${FAKE_DOCKER_LOG}" '--shm-size 4g'
 assert_contains "${FAKE_DOCKER_LOG}" '--network bridge'
 assert_contains "${FAKE_DOCKER_LOG}" '--publish 127.0.0.1:30000:30000'
+assert_contains "${FAKE_DOCKER_LOG}" '--user 10001:10001'
 assert_contains "${FAKE_DOCKER_LOG}" 'third_party/tair-kvcache:/workspace/tair-kvcache:ro'
 assert_contains "${FAKE_DOCKER_LOG}" 'config.json:/run/hisim/config.json:ro'
-assert_contains "${FAKE_DOCKER_LOG}" "${tmp_dir}/cache:/root/.cache/huggingface:rw"
+assert_contains "${FAKE_DOCKER_LOG}" "${tmp_dir}/cache:/home/app/.cache/huggingface:rw"
 assert_not_contains "${FAKE_DOCKER_LOG}" '--network host'
 assert_not_contains "${FAKE_DOCKER_LOG}" '--gpus'
-assert_contains "${root_dir}/scripts/start_server.sh" ':/run/hisim/h20:ro'
+assert_contains "${root_dir}/scripts/start_server.sh" ':/opt/hisim-data/aic:ro'
 
 state_dir="${RESULTS_ROOT}/.state/hisim-sglang-cpu-smoke"
 [[ -s "${state_dir}/container_id" ]] || fail 'start must save the container id'
 run_dir="$(<"${state_dir}/run_dir")"
 assert_contains "${FAKE_DOCKER_LOG}" "${run_dir}:/results:rw"
+[[ "$(stat -c %a "${tmp_dir}/cache")" = 777 ]] || fail 'cache root must be writable by the fixed non-root image UID'
+[[ "$(stat -c %a "${run_dir}")" = 777 ]] || fail 'result root must be writable by the fixed non-root image UID'
 [[ -f "${run_dir}/server/generic/launch.env" ]] || fail 'start must save launch metadata'
 [[ -f "${run_dir}/server/generic/cache-before.txt" ]] || fail 'start must save cache size'
 
@@ -136,6 +151,21 @@ if bash "${root_dir}/scripts/start_server.sh" invalid >/dev/null 2>&1; then
   fail 'start must reject an invalid kind'
 fi
 
+# The guard begins with server startup and recognizes the pinned SGLang message.
+rm -rf "${state_dir}"
+FAKE_SERVER_LOGS='Load weight begin.'
+export FAKE_SERVER_LOGS
+: >"${FAKE_DOCKER_LOG}"
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+for _ in $(seq 1 50); do
+  grep -F 'stop project-container-id' "${FAKE_DOCKER_LOG}" >/dev/null && break
+  sleep 0.02
+done
+assert_contains "${FAKE_DOCKER_LOG}" 'logs --follow project-container-id'
+assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
+assert_contains "${root_dir}/scripts/start_server.sh" 'Load weight end[.]'
+unset FAKE_SERVER_LOGS
+
 rm -rf "${state_dir}"
 if bash "${root_dir}/scripts/start_server.sh" h20 >/dev/null 2>&1; then
   fail 'h20 start must reject missing Task 8 config/data'
@@ -153,14 +183,15 @@ for profile in probe small; do
   : >"${FAKE_DOCKER_LOG}"
   : >"${FAKE_TIMEOUT_LOG}"
   BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic "${profile}"
-  bench_dir="${run_dir}/benchmark/generic/${profile}"
+  bench_dir="$(<"${state_dir}/last-benchmark-${profile}")"
+  [[ "$(stat -c %a "${bench_dir}")" = 777 ]] || fail "${profile} result directory must be container-writable"
   [[ -f "${bench_dir}/exit-code.txt" ]] || fail "${profile} must save exit code"
   [[ -f "${bench_dir}/stdout.log" && -f "${bench_dir}/stderr.log" ]] || fail "${profile} must save output"
   [[ -f "${bench_dir}/docker-stats.csv" && -f "${bench_dir}/resource-peak.txt" ]] || fail "${profile} must save resource evidence"
   [[ -f "${bench_dir}/cache-weight-changes.txt" ]] || fail "${profile} must save the cache weight-file scan"
   [[ -f "${bench_dir}/container-inspect.json" ]] || fail "${profile} must save inspect evidence"
   assert_contains "${FAKE_TIMEOUT_LOG}" 13
-  assert_contains "${FAKE_DOCKER_LOG}" 'exec project-container-id /opt/hisim/entrypoint.sh bench'
+  assert_contains "${FAKE_DOCKER_LOG}" 'exec project-container-id /usr/local/bin/entrypoint.sh bench'
   assert_contains "${bench_dir}/command.txt" '--bench-mode simulation'
   assert_contains "${bench_dir}/command.txt" '--warmup-requests 0'
   if [[ "${profile}" = probe ]]; then
@@ -174,24 +205,42 @@ for profile in probe small; do
   fi
 done
 
+first_probe_dir="$(<"${state_dir}/last-benchmark-probe")"
+BENCHMARK_TIMEOUT_SECONDS=13 bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null
+second_probe_dir="$(<"${state_dir}/last-benchmark-probe")"
+[[ "${first_probe_dir}" != "${second_probe_dir}" ]] || fail 'benchmark invocations must use unique evidence directories'
+[[ -f "${first_probe_dir}/exit-code.txt" && -f "${second_probe_dir}/exit-code.txt" ]] || fail 'unique benchmark evidence was overwritten'
+
+if RESOURCE_SAMPLE_INTERVAL_SECONDS=0 bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
+  fail 'zero resource sampling interval must be rejected'
+fi
+
 FAKE_BENCH_EXIT=23
 export FAKE_BENCH_EXIT
 if bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
   fail 'benchmark must preserve a nonzero exit status'
 fi
-[[ "$(<"${run_dir}/benchmark/generic/probe/exit-code.txt")" = 23 ]] || fail 'saved benchmark exit status is wrong'
+bench_dir="$(<"${state_dir}/last-benchmark-probe")"
+[[ "$(<"${bench_dir}/exit-code.txt")" = 23 ]] || fail 'saved benchmark exit status is wrong'
 unset FAKE_BENCH_EXIT
 
-FAKE_SERVER_LOGS='Loading checkpoint shards: 1/4'
-export FAKE_SERVER_LOGS
+# Keep the log follower alive and trigger the pinned guard while docker exec is
+# in flight, proving protection continues through benchmark execution.
+bash "${root_dir}/scripts/stop_server.sh" >/dev/null
+export FAKE_FOLLOW_WAIT_FILE="${tmp_dir}/benchmark-guard.trigger"
+export FAKE_BENCH_TRIGGER_GUARD=1
+: >"${FAKE_DOCKER_LOG}"
+bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+run_dir="$(<"${state_dir}/run_dir")"
 : >"${FAKE_DOCKER_LOG}"
 if bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
-  fail 'weight loading guard must fail the benchmark'
+  fail 'continuous weight loading guard must fail the in-flight benchmark'
 fi
-assert_contains "${run_dir}/benchmark/generic/probe/guard-failure.txt" 'Loading checkpoint shards'
+bench_dir="$(find "${run_dir}/benchmark/generic/probe" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+assert_contains "${bench_dir}/guard-failure.txt" 'Load weight end.'
 assert_contains "${FAKE_DOCKER_LOG}" 'stop project-container-id'
 assert_contains "${FAKE_DOCKER_LOG}" 'rm project-container-id'
-unset FAKE_SERVER_LOGS
+unset FAKE_FOLLOW_WAIT_FILE FAKE_BENCH_TRIGGER_GUARD
 
 # Recreate state to exercise the independent real-forward guard.
 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
@@ -201,7 +250,8 @@ export FAKE_SERVER_LOGS
 if bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
   fail 'real-forward guard must fail the benchmark'
 fi
-assert_contains "${run_dir}/benchmark/generic/probe/guard-failure.txt" 'ModelRunner.forward'
+bench_dir="$(find "${run_dir}/benchmark/generic/probe" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+assert_contains "${bench_dir}/guard-failure.txt" 'ModelRunner.forward'
 unset FAKE_SERVER_LOGS
 
 # An importable NVIDIA telemetry package is allowed, but CUDA initialization is not.
@@ -212,7 +262,8 @@ export FAKE_SERVER_LOGS
 if bash "${root_dir}/scripts/run_benchmark.sh" generic probe >/dev/null 2>&1; then
   fail 'CUDA initialization guard must fail the benchmark'
 fi
-assert_contains "${run_dir}/benchmark/generic/probe/guard-failure.txt" 'Initializing CUDA'
+bench_dir="$(find "${run_dir}/benchmark/generic/probe" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+assert_contains "${bench_dir}/guard-failure.txt" 'Initializing CUDA'
 unset FAKE_SERVER_LOGS
 
 # A readiness timeout is bounded and cleans up only the recorded container.

@@ -19,8 +19,9 @@ cache_dir="${HF_CACHE_DIR:-${repo_root}/cache/huggingface}"
 state_dir="${results_root}/.state/${container_name}"
 timeout_seconds="${BENCHMARK_TIMEOUT_SECONDS:-300}"
 stats_interval="${RESOURCE_SAMPLE_INTERVAL_SECONDS:-1}"
-[[ "${timeout_seconds}" =~ ^[1-9][0-9]*$ && "${stats_interval}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
-  die "benchmark timeout must be positive and resource interval nonnegative"
+[[ "${timeout_seconds}" =~ ^[1-9][0-9]*$ && "${stats_interval}" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+  awk -v interval="${stats_interval}" 'BEGIN { exit !(interval > 0) }' ||
+  die "benchmark timeout and resource sampling interval must be positive"
 [[ -s "${state_dir}/container_id" && -s "${state_dir}/run_dir" && -s "${state_dir}/kind" ]] ||
   die "no active project container state exists at ${state_dir}"
 require_command docker
@@ -30,9 +31,18 @@ container_id="$(<"${state_dir}/container_id")"
 run_dir="$(<"${state_dir}/run_dir")"
 active_kind="$(<"${state_dir}/kind")"
 [[ "${active_kind}" = "${kind}" ]] || die "active container kind is ${active_kind}, not ${kind}"
-bench_dir="${run_dir}/benchmark/${kind}/${profile}"
+invocation_id="$(date -u +%Y%m%dT%H%M%S%N)-$$"
+bench_dir="${run_dir}/benchmark/${kind}/${profile}/${invocation_id}"
 server_dir="${run_dir}/server/${kind}"
 mkdir -p "${bench_dir}" "${cache_dir}"
+chmod 0777 "${bench_dir}"
+printf '%s\n' "${bench_dir}" >"${state_dir}/last-benchmark-${profile}"
+guard_failure="${server_dir}/runtime-guard-failure.txt"
+if [[ -s "${guard_failure}" ]]; then
+  cp "${guard_failure}" "${bench_dir}/guard-failure.txt"
+  bash "${repo_root}/scripts/stop_server.sh" >/dev/null 2>&1 || true
+  exit 90
+fi
 
 common_args=(
   --backend sglang
@@ -42,7 +52,7 @@ common_args=(
   --bench-mode simulation
   --warmup-requests 0
   --disable-tqdm
-  --output-file "/results/benchmark/${kind}/${profile}/metrics.json"
+  --output-file "/results/benchmark/${kind}/${profile}/${invocation_id}/metrics.json"
 )
 case "${profile}" in
   probe)
@@ -52,7 +62,7 @@ case "${profile}" in
     profile_args=(--num-prompts 16 --max-concurrency 4 --random-input-len 256 --random-output-len 32)
     ;;
 esac
-command=(docker exec "${container_id}" /opt/hisim/entrypoint.sh bench "${common_args[@]}" "${profile_args[@]}")
+command=(docker exec "${container_id}" /usr/local/bin/entrypoint.sh bench "${common_args[@]}" "${profile_args[@]}")
 
 printf '%q ' timeout "${timeout_seconds}s" "${command[@]}" >"${bench_dir}/command.txt"
 printf '\n' >>"${bench_dir}/command.txt"
@@ -112,10 +122,14 @@ awk -F, '
   END { printf "peak_cpu_percent=%.2f\npeak_memory_mib=%.2f\n", peak_cpu, peak_memory_mib }
 ' "${bench_dir}/docker-stats.csv" >"${bench_dir}/resource-peak.txt"
 
-guard_pattern='Loading checkpoint shards|Loading safetensors checkpoint|Loading model weights|Weights loaded into memory|Executing real model forward|ModelRunner[.]forward|Forward pass started|CUDA (runtime )?initialized|Initializing CUDA|torch[.]cuda[.]init|NCCL communicator'
+guard_pattern='Load weight begin[.]|Load weight end[.]|Loading checkpoint shards|Loading safetensors checkpoint|Loading model weights|Weights loaded into memory|Executing real model forward|ModelRunner[.]forward|Forward pass started|CUDA (runtime )?initialized|Initializing CUDA|torch[.]cuda[.]init|NCCL communicator'
 guard_match="$(grep -E -m1 "${guard_pattern}" "${server_dir}/container.log" || true)"
-if [[ -n "${guard_match}" ]]; then
-  printf 'Forbidden real weight-load/model-forward indicator: %s\n' "${guard_match}" >"${bench_dir}/guard-failure.txt"
+if [[ -s "${guard_failure}" || -n "${guard_match}" ]]; then
+  if [[ -s "${guard_failure}" ]]; then
+    cp "${guard_failure}" "${bench_dir}/guard-failure.txt"
+  else
+    printf 'Forbidden runtime indicator: %s\n' "${guard_match}" >"${bench_dir}/guard-failure.txt"
+  fi
   bash "${repo_root}/scripts/stop_server.sh" || true
   exit 90
 fi

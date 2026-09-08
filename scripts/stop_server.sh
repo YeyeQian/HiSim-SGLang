@@ -25,7 +25,8 @@ mkdir -p "${server_dir}"
 actual_id="$(docker inspect --format '{{.Id}}' "${container_name}" 2>/dev/null || true)"
 if [[ -z "${actual_id}" ]]; then
   printf 'Recorded container %s no longer exists; preserving state evidence.\n' "${container_id}"
-  rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir"
+  rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir" \
+    "${state_dir}/last-benchmark-probe" "${state_dir}/last-benchmark-small"
   rmdir "${state_dir}" 2>/dev/null || true
   exit 0
 fi
@@ -39,6 +40,7 @@ printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${server_dir}/stopped-at.txt"
 
 docker stop "${container_id}" >/dev/null
 docker rm "${container_id}" >/dev/null
-rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir"
+rm -f "${state_dir}/container_id" "${state_dir}/container_name" "${state_dir}/kind" "${state_dir}/run_dir" \
+  "${state_dir}/last-benchmark-probe" "${state_dir}/last-benchmark-small"
 rmdir "${state_dir}" 2>/dev/null || true
 printf 'Stopped and removed project container %s (%s).\n' "${container_name}" "${container_id}"
