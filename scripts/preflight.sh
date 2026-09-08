@@ -25,17 +25,23 @@ else
   die "unsupported proxy URL '${selected_proxy}'; expected http://HOST:PORT"
 fi
 case "${proxy_host}" in
-  127.0.0.1 | localhost) ;;
-  *) die "unsupported proxy host '${proxy_host}'; expected 127.0.0.1 or localhost" ;;
+  127.0.0.1 | localhost)
+    if ! ss -ltnH "sport = :${proxy_port}" | awk -v host="${proxy_host}" -v port="${proxy_port}" '
+      $4 == "0.0.0.0:" port || $4 == "*:" port { found = 1 }
+      host == "127.0.0.1" && $4 == "127.0.0.1:" port { found = 1 }
+      host == "localhost" && ($4 == "127.0.0.1:" port || $4 == "[::1]:" port || $4 == "[::]:" port) { found = 1 }
+      END { exit !found }
+    '; then
+      die "proxy ${proxy_host}:${proxy_port} is not listening"
+    fi
+    ;;
+  *)
+    if ! curl --proxy "${selected_proxy}" --noproxy '' --connect-timeout 3 --max-time 5 \
+      --silent --output /dev/null http://example.com/; then
+      die "proxy endpoint ${proxy_host}:${proxy_port} is not reachable within 5 seconds"
+    fi
+    ;;
 esac
-if ! ss -ltnH "sport = :${proxy_port}" | awk -v host="${proxy_host}" -v port="${proxy_port}" '
-  $4 == "0.0.0.0:" port || $4 == "*:" port { found = 1 }
-  host == "127.0.0.1" && $4 == "127.0.0.1:" port { found = 1 }
-  host == "localhost" && ($4 == "127.0.0.1:" port || $4 == "[::1]:" port || $4 == "[::]:" port) { found = 1 }
-  END { exit !found }
-'; then
-  die "proxy ${proxy_host}:${proxy_port} is not listening"
-fi
 
 require_free_kib() {
   local path="$1"

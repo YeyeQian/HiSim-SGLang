@@ -27,16 +27,25 @@ ss() {
   fi
 }
 
-export -f docker df git ss
+curl() {
+  [[ "$*" = *http://proxy.example.test:3128* ]]
+}
+
+export -f curl docker df git ss
+
+DOCKER_PROJECT_PROXY=http://proxy.example.test:3128 \
+  bash "${repo_root}/scripts/preflight.sh" >/dev/null
+echo "valid non-loopback proxy override: PASS"
 
 # A listener on the requested port must not make an unrelated hostname valid.
 output="$(
   DOCKER_PROJECT_PROXY=http://definitely-not-a-real-proxy.invalid:17897 \
     bash "${repo_root}/scripts/preflight.sh" 2>&1
 )" && {
-  echo "preflight accepted an unsupported proxy host" >&2
+  echo "preflight accepted an unreachable proxy endpoint" >&2
   exit 1
 }
-grep -q "unsupported proxy host 'definitely-not-a-real-proxy.invalid'" <<<"${output}"
+grep -q "proxy endpoint definitely-not-a-real-proxy.invalid:17897 is not reachable" <<<"${output}"
+echo "invalid non-loopback proxy endpoint: PASS"
 
 echo "test_preflight.sh: PASS"
