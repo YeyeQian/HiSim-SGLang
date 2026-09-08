@@ -19,7 +19,12 @@ require_literal() {
 [[ -f "${dockerfile}" ]] || fail "Dockerfile is missing"
 [[ -f "${entrypoint}" ]] || fail "docker/entrypoint.sh is missing"
 
-require_literal "${dockerfile}" 'FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f'
+pinned_from='FROM ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004166d665dc76d38b13eada33522a9d915c6f'
+mapfile -t from_instructions < <(awk 'toupper($1) == "FROM" { print }' "${dockerfile}")
+if ((${#from_instructions[@]} != 1)) || [[ "${from_instructions[0]:-}" != "${pinned_from}" ]]; then
+  fail "Dockerfile must contain exactly one FROM instruction equal to the pinned Ubuntu base"
+fi
+
 require_literal "${dockerfile}" 'ARG AICONFIGURATOR_COMMIT=9f744a1910f317a091c88ade644d61094ea22119'
 require_literal "${dockerfile}" 'https://download.pytorch.org/whl/cpu'
 require_literal "${dockerfile}" 'torch==2.9.0'
@@ -36,13 +41,14 @@ require_literal "${dockerfile}" 'FLASHINFER_DISABLE_VERSION_CHECK=1'
 require_literal "${dockerfile}" 'PYTHONUNBUFFERED=1'
 require_literal "${dockerfile}" 'PATH="/opt/venv/bin:${PATH}"'
 require_literal "${dockerfile}" 'apt-get install --no-install-recommends'
+require_literal "${dockerfile}" 'python3-dev'
 require_literal "${dockerfile}" 'rm -rf /var/lib/apt/lists/*'
 require_literal "${dockerfile}" 'USER app'
 require_literal "${dockerfile}" 'WORKDIR /workspace'
 require_literal "${dockerfile}" 'ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]'
 
 docker_instructions="$(sed '/^[[:space:]]*#/d' "${dockerfile}")"
-if grep -Eqi -- '(^|[[:space:]])--gpus([=[:space:]]|$)|cuda-|nvidia-|(^|/)(rocm|cuda|xpu)(:|/)' <<<"${docker_instructions}"; then
+if grep -Eqi -- '(^|[[:space:]])--gpus([=[:space:]]|$)|cuda|nvidia|rocm|xpu|pytorch-cuda|torch[^[:space:]]*\+cu[0-9]+|/cu[0-9]+' <<<"${docker_instructions}"; then
   fail "Dockerfile contains a forbidden accelerator dependency, image, or flag"
 fi
 
@@ -80,6 +86,15 @@ printf '%s\n' "$@" >"${ENTRYPOINT_ARGS_FILE}"
 PYTHON_STUB
 chmod +x "${tmp_dir}/bin/python"
 
+expect_conflict_rejected() {
+  local name="$1"
+  shift
+  if "$@" >"${tmp_dir}/conflict.out" 2>&1; then
+    fail "${name} conflict was accepted"
+  fi
+  grep -Fq 'conflicts with required value' "${tmp_dir}/conflict.out" || fail "${name} conflict error is unclear"
+}
+
 if PATH="${tmp_dir}/bin:${PATH}" "${entrypoint}" server >"${tmp_dir}/missing.out" 2>&1; then
   fail "server accepted a missing HISIM_CONFIG_PATH"
 fi
@@ -92,6 +107,27 @@ fi
 grep -Fq 'does not exist' "${tmp_dir}/absent.out" || fail "nonexistent config error is unclear"
 
 touch "${tmp_dir}/config with spaces.json"
+expect_conflict_rejected 'server --device value' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  HISIM_CONFIG_PATH="${tmp_dir}/config with spaces.json" \
+  "${entrypoint}" server --device cuda
+expect_conflict_rejected 'server --device=value' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  HISIM_CONFIG_PATH="${tmp_dir}/config with spaces.json" \
+  "${entrypoint}" server --device=cuda
+expect_conflict_rejected 'bench --bench-mode' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  "${entrypoint}" bench --bench-mode normal
+expect_conflict_rejected 'bench --bench-mode=' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  "${entrypoint}" bench --bench-mode=normal
+expect_conflict_rejected 'bench --warmup-requests' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  "${entrypoint}" bench --warmup-requests 1
+expect_conflict_rejected 'bench --warmup-requests=' env \
+  ENTRYPOINT_ARGS_FILE="${tmp_dir}/conflict.args" PATH="${tmp_dir}/bin:${PATH}" \
+  "${entrypoint}" bench --warmup-requests=1
+
 ENTRYPOINT_ARGS_FILE="${tmp_dir}/server.args" PATH="${tmp_dir}/bin:${PATH}" \
   HISIM_CONFIG_PATH="${tmp_dir}/config with spaces.json" MODEL_PATH='model with spaces' \
   HOST=127.0.0.1 PORT=31000 "${entrypoint}" server --extra 'value with spaces' \
@@ -99,6 +135,8 @@ ENTRYPOINT_ARGS_FILE="${tmp_dir}/server.args" PATH="${tmp_dir}/bin:${PATH}" \
 expected_server_args="$(cat <<EOF
 -m
 hisim.simulation.sglang.launch_server
+--extra
+value with spaces
 --model-path
 model with spaces
 --sim-config-path
@@ -110,8 +148,6 @@ ${tmp_dir}/config with spaces.json
 --device
 cpu
 --skip-server-warmup
---extra
-value with spaces
 EOF
 )"
 test "$(cat "${tmp_dir}/server.args")" = "${expected_server_args}" || fail "server arguments are incorrect or not safely quoted"
@@ -119,7 +155,7 @@ grep -Fq "model=model with spaces config=${tmp_dir}/config with spaces.json host
 
 ENTRYPOINT_ARGS_FILE="${tmp_dir}/bench.args" PATH="${tmp_dir}/bin:${PATH}" \
   "${entrypoint}" bench --num-prompts 2
-test "$(cat "${tmp_dir}/bench.args")" = "$(printf '%s\n' -m hisim.simulation.bench_serving --bench-mode simulation --warmup-requests 0 --num-prompts 2)" \
+test "$(cat "${tmp_dir}/bench.args")" = "$(printf '%s\n' -m hisim.simulation.bench_serving --num-prompts 2 --bench-mode simulation --warmup-requests 0)" \
   || fail "bench does not force simulation mode and zero warmups"
 
 test "$("${entrypoint}" shell -c 'printf shell-ok')" = shell-ok || fail "shell command is not delegated to Bash"
