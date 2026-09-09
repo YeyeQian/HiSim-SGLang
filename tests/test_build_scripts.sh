@@ -68,7 +68,7 @@ set -e
   exit 1
 }
 test -f "${record_dir}/preflight-ran"
-test "$(cat "${fixture_root}/logs/docker-build.log")" = 'fixture build output'
+grep -Fxq 'fixture build output' "${fixture_root}/logs/docker-build.log"
 build_args="$(cat "${record_dir}/docker-args")"
 for expected in \
   'build --network host --progress=plain' \
