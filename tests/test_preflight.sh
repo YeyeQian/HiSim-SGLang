@@ -42,10 +42,13 @@ uname() {
 command() {
   if [[ "${1:-}" = -v ]]; then
     printf '%s\n' "${2:-}" >>"${TEST_COMMAND_LOG}"
-    if [[ "${TEST_HIDE_DOWNLOAD_TOOLS:-0}" = 1 ]]; then
+    if [[ "${TEST_HIDE_ARCHIVE_TOOLS:-0}" = 1 ]]; then
       case "${2:-}" in
-        curl | sha256sum | unzip) return 1 ;;
+        sha256sum | unzip) return 1 ;;
       esac
+    fi
+    if [[ "${TEST_HIDE_CURL:-0}" = 1 && "${2:-}" = curl ]]; then
+      return 1
     fi
   fi
   builtin command "$@"
@@ -62,21 +65,32 @@ export TEST_COMMAND_LOG="${command_log}"
 for proxy_setting in unset empty direct; do
   : >"${curl_log}"
   case "${proxy_setting}" in
-    unset) preflight_output="$(env -u DOCKER_PROJECT_PROXY TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_CURL_LOG="${curl_log}" bash "${repo_root}/scripts/preflight.sh")" ;;
-    empty) preflight_output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 DOCKER_PROJECT_PROXY= bash "${repo_root}/scripts/preflight.sh")" ;;
-    direct) preflight_output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 DOCKER_PROJECT_PROXY=direct bash "${repo_root}/scripts/preflight.sh")" ;;
+    unset) preflight_output="$(env -u DOCKER_PROJECT_PROXY TEST_HIDE_ARCHIVE_TOOLS=1 TEST_CURL_LOG="${curl_log}" bash "${repo_root}/scripts/preflight.sh")" ;;
+    empty) preflight_output="$(TEST_HIDE_ARCHIVE_TOOLS=1 DOCKER_PROJECT_PROXY= bash "${repo_root}/scripts/preflight.sh")" ;;
+    direct) preflight_output="$(TEST_HIDE_ARCHIVE_TOOLS=1 DOCKER_PROJECT_PROXY=direct bash "${repo_root}/scripts/preflight.sh")" ;;
   esac
   grep -q 'network mode is direct' <<<"${preflight_output}"
   test ! -s "${curl_log}"
 done
 
-if grep -Eq '^(curl|sha256sum|unzip)$' "${command_log}"; then
-  echo 'direct generic preflight required a download/archive-only tool' >&2
+if grep -Eq '^(sha256sum|unzip)$' "${command_log}"; then
+  echo 'direct generic preflight required an archive-only tool' >&2
   exit 1
 fi
-echo 'minimal generic tool requirements: PASS'
 
-output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_UNAME_MACHINE=aarch64 DOCKER_PROJECT_PROXY=direct \
+grep -Fxq curl "${command_log}" || {
+  echo 'direct generic preflight did not require host curl' >&2
+  exit 1
+}
+output="$(TEST_HIDE_CURL=1 DOCKER_PROJECT_PROXY=direct \
+  bash "${repo_root}/scripts/preflight.sh" 2>&1)" && {
+  echo 'preflight accepted a host without curl' >&2
+  exit 1
+}
+grep -q "required command 'curl' was not found" <<<"${output}"
+echo 'generic host curl requirement: PASS'
+
+output="$(TEST_HIDE_ARCHIVE_TOOLS=1 TEST_UNAME_MACHINE=aarch64 DOCKER_PROJECT_PROXY=direct \
   bash "${repo_root}/scripts/preflight.sh" 2>&1)" && {
   echo 'preflight accepted an unsupported non-x86_64 host' >&2
   exit 1
@@ -84,7 +98,7 @@ output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_UNAME_MACHINE=aarch64 DOCKER_PROJECT_P
 grep -q 'requires Linux x86_64' <<<"${output}"
 echo 'unsupported architecture rejection: PASS'
 
-output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_UNAME_SYSTEM=Darwin DOCKER_PROJECT_PROXY=direct \
+output="$(TEST_HIDE_ARCHIVE_TOOLS=1 TEST_UNAME_SYSTEM=Darwin DOCKER_PROJECT_PROXY=direct \
   bash "${repo_root}/scripts/preflight.sh" 2>&1)" && {
   echo 'preflight accepted a non-Linux host' >&2
   exit 1

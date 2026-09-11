@@ -89,6 +89,24 @@ source configs/versions.env
 [[ "${SHAREGPT_URL}" = *"/resolve/${SHAREGPT_REVISION}/"* ]] ||
   fail 'SHAREGPT_URL does not use SHAREGPT_REVISION'
 
+grep -Fxq 'git clone --recurse-submodules https://github.com/YeyeQian/HiSim-SGLang.git HiSim-SGLang' README.md ||
+  fail 'README quickstart does not contain the executable GitHub clone command'
+if grep -Fq '<GITHUB_REPOSITORY_URL>' README.md; then
+  fail 'README quickstart still contains a shell-redirection placeholder'
+fi
+grep -Fq 'Git、curl、Docker Engine' README.md ||
+  fail 'README host prerequisites do not include curl'
+if grep -Fq 'python3 scripts/validate_results.py' README.md; then
+  fail 'README bypasses the host-safe validator wrapper'
+fi
+for validation in \
+  'bash scripts/validate_results.sh "${bench_dir}" probe upstream_generic_mock' \
+  'bash scripts/validate_results.sh "${bench_dir}" small upstream_generic_mock' \
+  'bash scripts/validate_results.sh "${bench_dir}" probe official_h20_data_path' \
+  'bash scripts/validate_results.sh "${bench_dir}" sharegpt sharegpt_workload_shape'; do
+  grep -Fq "${validation}" README.md || fail "README is missing wrapper validation: ${validation}"
+done
+
 python3 scripts/check_markdown_links.py "${repo_root}" ||
   fail 'public Markdown contains a broken or unpublished local link'
 

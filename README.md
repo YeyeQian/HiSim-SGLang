@@ -10,10 +10,10 @@
 
 ## 快速开始
 
-目标宿主机必须是 Linux x86_64，已安装 Git、Docker Engine（daemon 已运行，当前用户可访问）和 `ss`，并在项目文件系统预留至少 40 GiB、Docker 数据目录预留至少 20 GiB。构建峰值会使用较多 CPU、内存和磁盘；运行容器固定上限为 16 CPU、32 GiB 内存和 4 GiB 共享内存。
+目标宿主机必须是 Linux x86_64，已安装 Git、curl、Docker Engine（daemon 已运行，当前用户可访问）和 `ss`，并在项目文件系统预留至少 40 GiB、Docker 数据目录预留至少 20 GiB。构建峰值会使用较多 CPU、内存和磁盘；运行容器固定上限为 16 CPU、32 GiB 内存和 4 GiB 共享内存。
 
 ```bash
-git clone --recurse-submodules <GITHUB_REPOSITORY_URL> HiSim-SGLang
+git clone --recurse-submodules https://github.com/YeyeQian/HiSim-SGLang.git HiSim-SGLang
 cd HiSim-SGLang
 bash scripts/quickstart.sh
 ```
@@ -66,12 +66,7 @@ bash scripts/start_server.sh generic
 bash scripts/wait_ready.sh
 bash scripts/run_benchmark.sh generic probe
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-probe)"
-python3 scripts/validate_results.py \
-  --metrics "${bench_dir}/metrics.json" \
-  --provenance "${bench_dir}/provenance.json" \
-  --profile probe \
-  --config-kind upstream_generic_mock \
-  --output "${bench_dir}/validation.json"
+bash scripts/validate_results.sh "${bench_dir}" probe upstream_generic_mock
 bash scripts/stop_server.sh
 ```
 
@@ -82,12 +77,7 @@ bash scripts/start_server.sh generic
 bash scripts/wait_ready.sh
 bash scripts/run_benchmark.sh generic small
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-small)"
-python3 scripts/validate_results.py \
-  --metrics "${bench_dir}/metrics.json" \
-  --provenance "${bench_dir}/provenance.json" \
-  --profile small \
-  --config-kind upstream_generic_mock \
-  --output "${bench_dir}/validation.json"
+bash scripts/validate_results.sh "${bench_dir}" small upstream_generic_mock
 bash scripts/stop_server.sh
 ```
 
@@ -102,12 +92,7 @@ bash scripts/start_server.sh h20
 bash scripts/wait_ready.sh
 bash scripts/run_benchmark.sh h20 probe
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-probe)"
-python3 scripts/validate_results.py \
-  --metrics "${bench_dir}/metrics.json" \
-  --provenance "${bench_dir}/provenance.json" \
-  --profile probe \
-  --config-kind official_h20_data_path \
-  --output "${bench_dir}/validation.json"
+bash scripts/validate_results.sh "${bench_dir}" probe official_h20_data_path
 bash scripts/stop_server.sh
 ```
 
@@ -123,12 +108,7 @@ bash scripts/start_server.sh generic sharegpt
 bash scripts/wait_ready.sh
 bash scripts/run_benchmark.sh generic sharegpt
 bench_dir="$(<results/.state/hisim-sglang-cpu-smoke/last-benchmark-sharegpt)"
-python3 scripts/validate_results.py \
-  --metrics "${bench_dir}/metrics.json" \
-  --provenance "${bench_dir}/provenance.json" \
-  --profile sharegpt \
-  --config-kind sharegpt_workload_shape \
-  --output "${bench_dir}/validation.json"
+bash scripts/validate_results.sh "${bench_dir}" sharegpt sharegpt_workload_shape
 bash scripts/stop_server.sh
 ```
 
