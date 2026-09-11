@@ -337,5 +337,5 @@ ITL 可以帮助观察输出是否平稳。例如平均很快，但 P99 很高�
 
 ## 9. 延伸阅读
 
-- [项目操作说明](../README.md)
-- [实施与验证报告](implementation_report.md)
+- [项目操作说明](../../../README.md)
+- [实施与验证报告](../reports/implementation_report.md)

@@ -22,7 +22,7 @@ SGLang 是一个面向大语言模型（LLM）和视觉语言模型（VLM）的�
 - 把 token 还原成文字并以流式响应返回；
 - 提供指标、追踪、权重更新、LoRA、结构化输出等生产能力。
 
-仓库自己的概括可见 [SGLang README](../third_party/sglang/README.md#about)。当前 Python 包的版本声明位于 [python/pyproject.toml](../third_party/sglang/python/pyproject.toml)。
+仓库自己的概括可见 [SGLang README](../../../third_party/sglang/README.md#about)。当前 Python 包的版本声明位于 [python/pyproject.toml](../../../third_party/sglang/python/pyproject.toml)。
 
 ## 2. 用“餐厅”理解 SGLang
 
@@ -84,7 +84,7 @@ def answer_question(s, question):
     s += sgl.assistant(sgl.gen("answer", max_tokens=128))
 ```
 
-公开 API 可从 [sglang/**init**.py](../third_party/sglang/python/sglang/__init__.py) 看到，解释和执行逻辑主要位于 [lang/interpreter.py](../third_party/sglang/python/sglang/lang/interpreter.py) 与 [lang/ir.py](../third_party/sglang/python/sglang/lang/ir.py)。
+公开 API 可从 [sglang/**init**.py](../../../third_party/sglang/python/sglang/__init__.py) 看到，解释和执行逻辑主要位于 [lang/interpreter.py](../../../third_party/sglang/python/sglang/lang/interpreter.py) 与 [lang/ir.py](../../../third_party/sglang/python/sglang/lang/ir.py)。
 
 注意：前端语言是“怎样描述一个 LLM 程序”；`srt` 则是“怎样高效运行模型”。只使用 OpenAI API 时，通常不需要先掌握前端语言。
 
@@ -110,7 +110,7 @@ def answer_question(s, question):
 | `metrics/`、`tracing/` | 指标和链路追踪                            | 生产部署时再深入                              |
 
 
-服务参数集中在 [srt/server_args.py](../third_party/sglang/python/sglang/srt/server_args.py)。这个文件很大，是了解“当前版本究竟支持什么能力”的实用索引，但不适合作为第一份源码阅读材料。
+服务参数集中在 [srt/server_args.py](../../../third_party/sglang/python/sglang/srt/server_args.py)。这个文件很大，是了解“当前版本究竟支持什么能力”的实用索引，但不适合作为第一份源码阅读材料。
 
 ### 3.3 `sgl-kernel`：高性能算子层
 
@@ -154,7 +154,7 @@ flowchart LR
 - HTTP、gRPC、OpenAI 兼容协议；
 - Prometheus、OpenTelemetry 等可观测能力。
 
-详细边界可见 [SGLang Model Gateway README](../third_party/sglang/sgl-model-gateway/README.md#architecture-at-a-glance)。
+详细边界可见 [SGLang Model Gateway README](../../../third_party/sglang/sgl-model-gateway/README.md#architecture-at-a-glance)。
 
 需要特别区分两层调度：
 
@@ -165,7 +165,7 @@ flowchart LR
 
 `python/sglang/multimodal_gen` 是扩散模型运行时，服务于图片和视频生成，不要与“LLM 接收图片后输出文字”的 VLM 推理混淆。
 
-它采用可组合 Pipeline：提示词编码、去噪循环、VAE 解码等步骤分别是可复用的 `PipelineStage`。相关设计见 [support_new_models.md](../third_party/sglang/python/sglang/multimodal_gen/docs/support_new_models.md#architecture-overview)。
+它采用可组合 Pipeline：提示词编码、去噪循环、VAE 解码等步骤分别是可复用的 `PipelineStage`。相关设计见 [support_new_models.md](../../../third_party/sglang/python/sglang/multimodal_gen/docs/support_new_models.md#architecture-overview)。
 
 ## 4. 一次文本请求究竟怎样运行
 
@@ -226,7 +226,7 @@ sequenceDiagram
 
 
 
-这不是根据名字猜出来的：服务入口的代码注释直接描述了三个核心组件和进程关系，见 [http_server.py 的 `launch_server](../third_party/sglang/python/sglang/srt/entrypoints/http_server.py#L1369)`。
+这不是根据名字猜出来的：服务入口的代码注释直接描述了三个核心组件和进程关系，见 [`http_server.py` 的 `launch_server`](../../../third_party/sglang/python/sglang/srt/entrypoints/http_server.py#L1369)。
 
 ### 4.2 第一步：HTTP Server 解析协议
 
@@ -302,7 +302,7 @@ Scheduler 每轮要综合考虑：
 - LoRA 是否兼容同批执行；
 - 推测解码、结构化输出、PP/DP 等模式。
 
-主循环位于 [managers/scheduler.py](../third_party/sglang/python/sglang/srt/managers/scheduler.py)。它创建 `TpModelWorker`，后者再创建 [ModelRunner](../third_party/sglang/python/sglang/srt/model_executor/model_runner.py) 执行模型。
+主循环位于 [managers/scheduler.py](../../../third_party/sglang/python/sglang/srt/managers/scheduler.py)。它创建 `TpModelWorker`，后者再创建 [ModelRunner](../../../third_party/sglang/python/sglang/srt/model_executor/model_runner.py) 执行模型。
 
 ### 4.5 第四步：Prefill 和 Decode
 
@@ -382,7 +382,7 @@ flowchart TD
 - 缓存容量有限，需要配合引用计数和淘汰策略；
 - `page_size` 会影响匹配粒度、元数据开销和 I/O 效率。
 
-实现集中在 [srt/mem_cache](../third_party/sglang/python/sglang/srt/mem_cache/)，其中包括 `radix_cache.py`、`memory_pool.py`、`allocator.py` 和不同变体。
+实现集中在 [srt/mem_cache](../../../third_party/sglang/python/sglang/srt/mem_cache/)，其中包括 `radix_cache.py`、`memory_pool.py`、`allocator.py` 和不同变体。
 
 ## 6. Paged Attention 与 Radix Cache 不是一回事
 
@@ -418,7 +418,7 @@ flowchart LR
 3. **load**：计算需要的数据进入 GPU；
 4. **write-back**：新产生或被淘汰的 KV Cache 按策略写回 L2/L3。
 
-详细设计见 [HiCache System Design](../third_party/sglang/docs/advanced_features/hicache_design.md)。代码主要位于：
+详细设计见 [HiCache System Design](../../../third_party/sglang/docs/advanced_features/hicache_design.md)。代码主要位于：
 
 - `mem_cache/hiradix_cache.py`：分层 radix tree；
 - `mem_cache/hicache_storage.py`：存储抽象；
@@ -452,7 +452,7 @@ flowchart TB
 
 
 
-实际组合比图复杂。当前快照会在 `_launch_subprocesses` 中根据 `dp_size`、`tp_size`、`pp_size`、节点 rank 等参数创建 Scheduler 或 DataParallelController，见 [entrypoints/engine.py](../third_party/sglang/python/sglang/srt/entrypoints/engine.py#L783)。
+实际组合比图复杂。当前快照会在 `_launch_subprocesses` 中根据 `dp_size`、`tp_size`、`pp_size`、节点 rank 等参数创建 Scheduler 或 DataParallelController，见 [entrypoints/engine.py](../../../third_party/sglang/python/sglang/srt/entrypoints/engine.py#L783)。
 
 ## 9. SGLang 的进程模型
 
@@ -542,11 +542,11 @@ hisim_hook.install_class_hooks([...])
 from sglang.srt.entrypoints.engine import Engine
 ```
 
-这段顺序可以在 [sglang_bench.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_bench.py) 中看到。如果先导入目标类再装 Hook，替换可能无法覆盖初始化过程。
+这段顺序可以在 [sglang_bench.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_bench.py) 中看到。如果先导入目标类再装 Hook，替换可能无法覆盖初始化过程。
 
 ### 11.2 HiSim 主要 Hook 了什么
 
-入口 [hisim/simulation/sglang/launch_server.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/launch_server.py) 注册了：
+入口 [hisim/simulation/sglang/launch_server.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/launch_server.py) 注册了：
 
 - `C_SchedulerHook`：介入调度循环和模拟时间推进；
 - `C_ModelRunnerHook`：不加载/执行真实大模型，建立 Mock 模型和内存池；
@@ -556,7 +556,7 @@ from sglang.srt.entrypoints.engine import Engine
 - `C_HiRadixCacheHook`：模拟 HiRadixCache 行为；
 - CPU 环境下的 SGL Kernel module hook：绕开不适用的 GPU 内核加载。
 
-Hook 的具体实现位于 [sglang_hook.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)，Mock 对象位于 [sglang_mock_class.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_mock_class.py)。
+Hook 的具体实现位于 [sglang_hook.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)，Mock 对象位于 [sglang_mock_class.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_mock_class.py)。
 
 ### 11.3 为什么仍然需要完整 SGLang 源码
 
@@ -569,7 +569,7 @@ Hook 的具体实现位于 [sglang_hook.py](../third_party/tair-kvcache/hisim/sr
 - `Req`、`ScheduleBatch` 等内部数据结构；
 - Radix/HiCache 的接口和元数据逻辑。
 
-因此 HiSim 对 SGLang 版本比较敏感。本仓库把上游固定在 `0.5.6.post2`，并在 Docker 构建中从本地源码安装。构建过程见 [Dockerfile](../Dockerfile)，兼容版本检查见 [hisim/simulation/sglang/version.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/version.py)。
+因此 HiSim 对 SGLang 版本比较敏感。本仓库把上游固定在 `0.5.6.post2`，并在 Docker 构建中从本地源码安装。构建过程见 [Dockerfile](../../../Dockerfile)，兼容版本检查见 [hisim/simulation/sglang/version.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/version.py)。
 
 ### 11.4 CPU 镜像并不代表原版 SGLang 在 CPU 上完整执行 Qwen3-8B
 
@@ -593,7 +593,7 @@ python -m hisim.simulation.sglang.launch_server
 python -m sglang.launch_server
 ```
 
-可在 [docker/entrypoint.sh](../docker/entrypoint.sh) 中确认这一边界。
+可在 [docker/entrypoint.sh](../../../docker/entrypoint.sh) 中确认这一边界。
 
 ## 12. 用一个重复前缀例子串起 SGLang 与 HiSim
 
@@ -631,10 +631,10 @@ python -m sglang.launch_server
 
 ### 第一轮：只建立全局图
 
-1. [SGLang README](../third_party/sglang/README.md#about)
-2. [launch_server.py](../third_party/sglang/python/sglang/launch_server.py)
-3. [http_server.py 的架构注释](../third_party/sglang/python/sglang/srt/entrypoints/http_server.py#L1369)
-4. [Engine 公共 API](../third_party/sglang/python/sglang/srt/entrypoints/engine.py#L93)
+1. [SGLang README](../../../third_party/sglang/README.md#about)
+2. [launch_server.py](../../../third_party/sglang/python/sglang/launch_server.py)
+3. [http_server.py 的架构注释](../../../third_party/sglang/python/sglang/srt/entrypoints/http_server.py#L1369)
+4. [Engine 公共 API](../../../third_party/sglang/python/sglang/srt/entrypoints/engine.py#L93)
 
 目标：能复述 HTTP、Tokenizer、Scheduler、ModelRunner、Detokenizer 的关系。
 
@@ -669,10 +669,10 @@ python -m sglang.launch_server
 
 ### 第五轮：再看 HiSim Hook
 
-1. [HiSim launch_server.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/launch_server.py)
-2. [sglang_bench.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_bench.py)
-3. [sglang_hook.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)
-4. [sglang_mock_class.py](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_mock_class.py)
+1. [HiSim launch_server.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/launch_server.py)
+2. [sglang_bench.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_bench.py)
+3. [sglang_hook.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)
+4. [sglang_mock_class.py](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_mock_class.py)
 5. 时间预测器与 `StateManager`、`ConfigManager`
 
 目标：区分哪些行为来自原版 SGLang，哪些行为被 HiSim 替换。
@@ -723,12 +723,12 @@ flowchart LR
 
 ## 16. 继续学习的本地资料
 
-- [SGLang 文档目录](../third_party/sglang/docs/)
-- [基础用法](../third_party/sglang/docs/basic_usage/)
-- [高级特性](../third_party/sglang/docs/advanced_features/)
-- [支持的模型](../third_party/sglang/docs/supported_models/)
-- [开发者指南](../third_party/sglang/docs/developer_guide/)
-- [示例](../third_party/sglang/examples/)
-- [基准测试](../third_party/sglang/benchmark/)
-- [本项目 README](../README.md)
-- [HiSim-SGLang CPU Docker 交接说明](../HISIM_SGLANG_CPU_DOCKER_HANDOFF.md)
+- [SGLang 文档目录](../../../third_party/sglang/docs/)
+- [基础用法](../../../third_party/sglang/docs/basic_usage/)
+- [高级特性](../../../third_party/sglang/docs/advanced_features/)
+- [支持的模型](../../../third_party/sglang/docs/supported_models/)
+- [开发者指南](../../../third_party/sglang/docs/developer_guide/)
+- [示例](../../../third_party/sglang/examples/)
+- [基准测试](../../../third_party/sglang/benchmark/)
+- [本项目 README](../../../README.md)
+- [HiSim-SGLang CPU Docker 交接说明](../../../HISIM_SGLANG_CPU_DOCKER_HANDOFF.md)

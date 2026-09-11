@@ -81,7 +81,7 @@ SGLang 决定每轮进入 batch 的请求和 Token 数，HiSim predictor 分别�
 
 HiSim 在 SGLang hook 与具体 predictor 之间已有明确接口。未来可为特定模型和阶段增加专用 predictor，而不必重写 HTTP 和请求调度层。
 
-相关实现可参考 [`sglang_hook.py`](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py) 和 [`time_predictor`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/)。
+相关实现可参考 [`sglang_hook.py`](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py) 和 [`time_predictor`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/)。
 
 ## 6. HiSim 的缺点
 
@@ -136,4 +136,4 @@ Prefill predictor 使用 mean input、mean past-KV 和 attention imbalance corre
 4. **开展联合 workload 验证。** 使用 SGLang 实际 batch 和确定性/ShareGPT workload 检查请求级指标与内部 Event 结果是否一致。
 5. **最后进行真机校准和扩展。** 先用目标 GPU 建立误差曲线，再逐项研究动态 KV 长度、非均匀 expert routing、更多 GPU、TP+EP 和多节点；不能从当前 H20/H800 或 `TP=EP=PP=1` 结果直接外推。
 
-进一步的公式和模块分析见 [`llm_ep_simulator_reference_assessment.md`](llm_ep_simulator_reference_assessment.md)；当前 H20 predictor 的计算过程见 [`hisim_h20_inference_latency_calculation.md`](hisim_h20_inference_latency_calculation.md)。
+进一步的公式和模块分析见 [`llm_ep_simulator_reference_assessment.md`](../evaluations/llm_ep_simulator_reference_assessment.md)；当前 H20 predictor 的计算过程见 [`hisim_h20_inference_latency_calculation.md`](../internals/hisim_h20_inference_latency_calculation.md)。

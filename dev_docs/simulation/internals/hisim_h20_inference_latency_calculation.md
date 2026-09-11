@@ -4,7 +4,7 @@
 
 当前 H20 路径并不是在本服务器上执行 Qwen3-8B 的真实 GPU forward。SGLang 仍负责形成实际请求 batch，HiSim hook 把每个请求压缩成“本轮输入 Token 数、已有 KV Token 数”，再由 AIConfigurator 根据 Qwen3-8B 结构、H20 性能表和解析带宽模型估算各项算子耗时。各项毫秒值求和、应用 Prefill/Decode 修正系数后转换成秒，交给 HiSim 的模拟时钟。
 
-当前固定配置是 Qwen3-8B、SGLang `0.5.6.post2`、H20 数据路径、FP16 权重/激活、FP16 KV cache、`tp_size=1`。Prefill 总时延乘 `1.045`，Decode 总时延乘 `1.0`；Decode attention 还可按 batch size 选择 XGBoost 模型进行校正。配置见 [`configs/h20-qwen3-8b.json`](../configs/h20-qwen3-8b.json)。
+当前固定配置是 Qwen3-8B、SGLang `0.5.6.post2`、H20 数据路径、FP16 权重/激活、FP16 KV cache、`tp_size=1`。Prefill 总时延乘 `1.045`，Decode 总时延乘 `1.0`；Decode attention 还可按 batch size 选择 XGBoost 模型进行校正。配置见 [`configs/h20-qwen3-8b.json`](../../../configs/h20-qwen3-8b.json)。
 
 这些结果目前只证明固定 H20 predictor 数据能够驱动 HiSim + SGLang 全链路，属于集成验证；本项目没有在本机实体 H20 上独立采样并校准，因此不能把模拟值表述为本服务器真卡性能。
 
@@ -34,13 +34,13 @@ HiSim 保存本轮 inference duration
 process_batch_result 合并 HiCache 时延、推进全局时钟并生成请求级 TTFT/TPOT/ITL
 ```
 
-SGLang hook 位于 [`sglang_hook.py`](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)。它只在 SGLang 返回 `GenerationBatchResult` 后建立 HiSim batch：
+SGLang hook 位于 [`sglang_hook.py`](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py)。它只在 SGLang 返回 `GenerationBatchResult` 后建立 HiSim batch：
 
 - 对 SGLang `extend` batch：`input_length = req.extend_input_len`；
 - 对 SGLang `decode` batch：`input_length = 1`；
 - 两种情况都令 `past_kv_length = len(req.prefix_indices) + len(req.output_ids)`。
 
-随后 hook 调用 `INFERENCE_PREDICTOR.predict_infer_time()`。离线模式把预测秒数保存为本轮 `current_inference_dur`；阻塞模式则按预测值等待墙钟时间后记录实际等待时长。真正推进全局模拟时钟发生在后续 `process_batch_result()`：它会根据 overlap 配置，将本轮 inference duration 与 HiCache L2 load/backup 时延串行相加或部分重叠。相关逻辑见 [`sglang_hook.py`](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py#L792-L877)。
+随后 hook 调用 `INFERENCE_PREDICTOR.predict_infer_time()`。离线模式把预测秒数保存为本轮 `current_inference_dur`；阻塞模式则按预测值等待墙钟时间后记录实际等待时长。真正推进全局模拟时钟发生在后续 `process_batch_result()`：它会根据 overlap 配置，将本轮 inference duration 与 HiCache L2 load/backup 时延串行相加或部分重叠。相关逻辑见 [`sglang_hook.py`](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py#L792-L877)。
 
 ## 3. Prefill/Decode 判定及 `extend_input_len=1` 边界
 
@@ -53,7 +53,7 @@ for req in self.reqs:
 return True
 ```
 
-定义见 [`time_predictor/base.py`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/base.py#L56-L63)。由此产生三个重要边界：
+定义见 [`time_predictor/base.py`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/base.py#L56-L63)。由此产生三个重要边界：
 
 1. batch 中所有请求的 `input_length <= 1` 时，整个 batch 走 Decode；
 2. 只要有一个请求的 `input_length > 1`，整个 batch 都走 Prefill；
@@ -63,7 +63,7 @@ return True
 
 ## 4. 当前 Qwen3-8B 实际覆盖的算子
 
-HiSim 的 [`get_perf_model()`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L267-L359) 把 `qwen3` 注册为 AIConfigurator 的 `LLAMA` family。当前容器中 AIConfigurator 的 Qwen/LLAMA dense pipeline 位于 `/opt/venv/lib/python3.10/site-packages/aiconfigurator/sdk/models.py`，实际覆盖下列项目。
+HiSim 的 [`get_perf_model()`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L267-L359) 把 `qwen3` 注册为 AIConfigurator 的 `LLAMA` family。当前容器中 AIConfigurator 的 Qwen/LLAMA dense pipeline 位于 `/opt/venv/lib/python3.10/site-packages/aiconfigurator/sdk/models.py`，实际覆盖下列项目。
 
 | Prefill/Context | Decode/Generation | 估算方式 |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ AIConfigurator 的 SGLang backend 源码还包含一个条件分支：仅当内�
 
 ## 5. H20 性能表与带宽公式
 
-H20 数据由 [`scripts/fetch_h20_data.sh`](../scripts/fetch_h20_data.sh) 准备，并由配置中的 `database_path=/opt/hisim-data/aic`、`device_name=h20_sxm` 和 `backend_version=0.5.6.post2` 精确选择。运行时主要使用：
+H20 数据由 [`scripts/fetch_h20_data.sh`](../../../scripts/fetch_h20_data.sh) 准备，并由配置中的 `database_path=/opt/hisim-data/aic`、`device_name=h20_sxm` 和 `backend_version=0.5.6.post2` 精确选择。运行时主要使用：
 
 - `gemm_perf.txt`；
 - `context_attention_perf.txt`；
@@ -156,7 +156,7 @@ r = AIC_generation_attention_ms / measured_generation_attention_ms
 generation_attention_scale = 1 / max(r, 1e-6)
 ```
 
-传给 AIConfigurator，只修正 `generation_attention`，不直接缩放 GEMM、ElementWise 或 logits。实现见 [`aiconfigurator.py`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L141-L201) 和 [`predict_infer_time()`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L447-L480)。
+传给 AIConfigurator，只修正 `generation_attention`，不直接缩放 GEMM、ElementWise 或 logits。实现见 [`aiconfigurator.py`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L141-L201) 和 [`predict_infer_time()`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L447-L480)。
 
 因此不同 Decode batch size 同时影响：
 
@@ -200,7 +200,7 @@ attention_imbalance_ratio
   = F_actual / F_avg
 ```
 
-当该比值不低于 `0.4` 时，它被作为 `seq_imbalance_correction_scale` 传入 Context Attention；低于 `0.4` 时回到默认比例 `1.0`。该比例只修正 `context_attention`，不会重新按每个请求分别计算其他算子。公式实现见 [`ctx_attn_flops_ratio_with_avg()`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L430-L445)。
+当该比值不低于 `0.4` 时，它被作为 `seq_imbalance_correction_scale` 传入 Context Attention；低于 `0.4` 时回到默认比例 `1.0`。该比例只修正 `context_attention`，不会重新按每个请求分别计算其他算子。公式实现见 [`ctx_attn_flops_ratio_with_avg()`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L430-L445)。
 
 ### 两请求示例
 
@@ -256,7 +256,7 @@ AIConfigurator：估算这个 batch/chunk 的模型 forward latency
 HiSim 时钟：把多轮 chunk、排队和 Decode 迭代累计成请求级指标
 ```
 
-SGLang 的 chunk 分配和 `extend_input_len` 更新可见 [`schedule_policy.py`](../third_party/sglang/python/sglang/srt/managers/schedule_policy.py)；HiSim 读取当前值的位置见 [`sglang_hook.py`](../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py#L801-L818)。
+SGLang 的 chunk 分配和 `extend_input_len` 更新可见 [`schedule_policy.py`](../../../third_party/sglang/python/sglang/srt/managers/schedule_policy.py)；HiSim 读取当前值的位置见 [`sglang_hook.py`](../../../third_party/tair-kvcache/hisim/src/hisim/simulation/sglang/sglang_hook.py#L801-L818)。
 
 需要特别保留第 3 节的边界：若某轮所有 chunk 都恰好为 1 Token，当前 HiSim predictor 会按 Decode 处理，即使 SGLang 外层 mode 是 `extend`。
 
@@ -274,7 +274,7 @@ T_decode_seconds
 
 Decode 的 `generation_attention` 在进入求和前可能已经乘过 XGBoost 给出的 `1/r`；当前路径不包含前述条件式 Qwen3-8B inherent latency。Prefill 的 `context_attention` 在进入求和前可能已经乘过 attention imbalance ratio。
 
-代码顺序是先取得 `get_generation_latency_dict()` 或 `get_context_latency_dict()`，再求和，然后应用 `decode_scale_factor` 或 `prefill_scale_factor`，最后除以 1000。实现见 [`aiconfigurator.py`](../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L480-L518)。
+代码顺序是先取得 `get_generation_latency_dict()` 或 `get_context_latency_dict()`，再求和，然后应用 `decode_scale_factor` 或 `prefill_scale_factor`，最后除以 1000。实现见 [`aiconfigurator.py`](../../../third_party/tair-kvcache/hisim/src/hisim/time_predictor/aiconfigurator.py#L480-L518)。
 
 若 AIConfigurator 判断 OOM，会把总时延改为负值；HiSim predictor 接口用负值表达异常类结果。正常 H20 仿真使用正值推进模拟时钟。
 
