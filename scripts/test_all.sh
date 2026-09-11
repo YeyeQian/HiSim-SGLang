@@ -28,4 +28,4 @@ if [[ "${overall_status}" -ne 0 ]]; then
   exit "${overall_status}"
 fi
 
-printf 'All static shell tests and Python unit tests passed.\n'
+printf 'All shell orchestration tests and Python unit tests passed.\n'
