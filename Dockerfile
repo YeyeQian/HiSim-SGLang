@@ -76,7 +76,7 @@ RUN rm -rf /opt/src/aiconfigurator \
     && git init /opt/src/aiconfigurator \
     && git -C /opt/src/aiconfigurator remote add origin https://github.com/ai-dynamo/aiconfigurator.git \
     && for attempt in 1 2 3; do \
-      GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}" \
+      timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}" \
         && break; \
       test "${attempt}" -lt 3 || exit 1; \
     done \

@@ -58,7 +58,7 @@ require_literal "${dockerfile}" 'cp python/pyproject_cpu.toml python/pyproject.t
 require_literal "${dockerfile}" 'cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml'
 require_literal "${dockerfile}" 'git init /opt/src/aiconfigurator'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator remote add origin https://github.com/ai-dynamo/aiconfigurator.git'
-require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}"'
+require_literal "${dockerfile}" 'timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}"'
 require_literal "${dockerfile}" 'GIT_LFS_SKIP_SMUDGE=1'
 require_block "${dockerfile}" $'RUN rm -rf /opt/src/aiconfigurator \\\n    && git init /opt/src/aiconfigurator'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach FETCH_HEAD'

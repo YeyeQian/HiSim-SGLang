@@ -62,6 +62,10 @@ for local_only in \
     fail "local-only document remains tracked: ${local_only}"
 done
 
+if git ls-files '.superpowers/**' | grep -q .; then
+  fail 'generated root .superpowers workspace content remains tracked'
+fi
+
 for submodule in third_party/sglang third_party/tair-kvcache; do
   mode="$(git ls-files -s -- "${submodule}" | awk '{print $1}')"
   [[ "${mode}" = 160000 ]] || fail "${submodule} is not a gitlink"
@@ -74,8 +78,8 @@ while read -r mode object stage path; do
   ((size <= max_blob_bytes)) || fail "tracked file exceeds 10 MiB: ${path} (${size} bytes)"
 done < <(git ls-files -s)
 
-grep -Fq 'git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}"' Dockerfile ||
-  fail 'AIConfigurator fixed commit is not fetched directly'
+grep -Fq 'timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}"' Dockerfile ||
+  fail 'AIConfigurator fixed commit fetch is not directly pinned and bounded to 120 seconds'
 if grep -Eq 'git clone .*--branch[ =]' Dockerfile; then
   fail 'AIConfigurator retrieval still depends on a moving branch tip'
 fi
@@ -85,39 +89,31 @@ source configs/versions.env
 [[ "${SHAREGPT_URL}" = *"/resolve/${SHAREGPT_REVISION}/"* ]] ||
   fail 'SHAREGPT_URL does not use SHAREGPT_REVISION'
 
-python3 - "${repo_root}" <<'PYTHON' || fail 'public Markdown contains a broken local link'
-import pathlib
-import re
-import subprocess
-import sys
-import urllib.parse
+python3 scripts/check_markdown_links.py "${repo_root}" ||
+  fail 'public Markdown contains a broken or unpublished local link'
 
-root = pathlib.Path(sys.argv[1])
-tracked = subprocess.check_output(
-    ["git", "-C", str(root), "ls-files", "*.md"], text=True
-).splitlines()
-removed = {
-    "HISIM_SGLANG_CPU_DOCKER_HANDOFF.md",
-    "dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md",
-}
-link_re = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf -- "${tmp_dir}"' EXIT
+git -C "${tmp_dir}" init -q
+git -C "${tmp_dir}" config user.email test@example.invalid
+git -C "${tmp_dir}" config user.name 'Hygiene Test'
 
-for relative in tracked:
-    if relative in removed:
-        raise SystemExit(f"local-only document is tracked: {relative}")
-    document = root / relative
-    for raw_target in link_re.findall(document.read_text(encoding="utf-8")):
-        target = raw_target.strip().split(maxsplit=1)[0].strip("<>")
-        if not target or target.startswith(("#", "http://", "https://", "mailto:")):
-            continue
-        target = urllib.parse.unquote(target.split("#", 1)[0])
-        resolved = (document.parent / target).resolve()
-        try:
-            resolved.relative_to(root.resolve())
-        except ValueError:
-            raise SystemExit(f"{relative}: link escapes repository: {raw_target}")
-        if not resolved.exists():
-            raise SystemExit(f"{relative}: missing link target: {raw_target}")
-PYTHON
+printf '%s\n' '[published][guide]' '' '[guide]: guide.md' >"${tmp_dir}/README.md"
+printf '%s\n' '# Guide' >"${tmp_dir}/guide.md"
+printf '%s\n' 'ignored.md' >"${tmp_dir}/.gitignore"
+git -C "${tmp_dir}" add .gitignore README.md guide.md
+python3 scripts/check_markdown_links.py "${tmp_dir}" ||
+  fail 'reference-style link to a tracked file was rejected'
+
+printf '%s\n' '[private](ignored.md)' >"${tmp_dir}/README.md"
+printf '%s\n' 'local only' >"${tmp_dir}/ignored.md"
+if python3 scripts/check_markdown_links.py "${tmp_dir}" >/dev/null 2>&1; then
+  fail 'link gate accepted an existing but untracked local target'
+fi
+
+printf '%s\n' '[missing][guide]' '' '[guide]: absent.md' >"${tmp_dir}/README.md"
+if python3 scripts/check_markdown_links.py "${tmp_dir}" >/dev/null 2>&1; then
+  fail 'link gate ignored a broken reference-style local link'
+fi
 
 echo 'test_repo_hygiene.sh: PASS'
