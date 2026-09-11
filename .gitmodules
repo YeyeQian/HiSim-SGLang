@@ -4,3 +4,6 @@
 [submodule "third_party/sglang"]
 	path = third_party/sglang
 	url = https://github.com/sgl-project/sglang.git
+[submodule "third_party/llm-ep-simulator"]
+	path = third_party/llm-ep-simulator
+	url = https://github.com/YeyeQian/llm-ep-simulator.git

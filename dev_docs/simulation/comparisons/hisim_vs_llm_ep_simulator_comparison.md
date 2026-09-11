@@ -13,6 +13,8 @@ HiSim 与 `third_party/llm-ep-simulator` 都是不执行真实 GPU kernel 的性
 
 `llm-ep-simulator` 当前只支持固定 DeepSeek-V3 Decode、H20/H800、单一 EP Group，`EP=8..256` 且必须是 8 的倍数；它不支持 TP。双方目前是相邻的独立能力，不应表述为已经集成。
 
+本仓库以固定提交的 submodule 保存 `third_party/llm-ep-simulator` 源码，便于后续设计和实现参考；该源码当前不安装进镜像，也不接入 HiSim runtime 或 preflight。
+
 ## 2. 相同点
 
 1. 都以解析模型或性能数据估算延迟，不加载完整模型权重执行真实 forward。

@@ -3,7 +3,6 @@
 .local_docs/
 HISIM_SGLANG_CPU_DOCKER_HANDOFF.md
 dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md
-third_party/llm-ep-simulator/
 cache/
 results/
 logs/

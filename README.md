@@ -18,7 +18,9 @@ cd HiSim-SGLang
 bash scripts/quickstart.sh
 ```
 
-如果已经 clone 但未初始化子模块，执行 `git submodule update --init --recursive`。quickstart 会检查 pins 和宿主机、从源码构建 CPU-only 镜像、检查镜像、启动 generic 服务、运行离线 probe、校验结果并停止服务；失败时也只清理本次由项目启动的服务容器。首次源码构建需要访问 Ubuntu、PyTorch、GitHub 和 Python 包源，耗时和磁盘占用显著高于后续复用镜像的运行。
+recursive clone 会取得三个固定提交的子模块：SGLang、tair-kvcache/HiSim，以及仅供未来开发参考的 llm-ep-simulator。如果已经 clone 但未初始化子模块，执行 `git submodule update --init --recursive`。llm-ep-simulator 当前尚未与 HiSim runtime 集成，也不会安装进 Docker 镜像或参与 preflight。
+
+quickstart 会检查 pins 和宿主机、从源码构建 CPU-only 镜像、检查镜像、启动 generic 服务、运行离线 probe、校验结果并停止服务；失败时也只清理本次由项目启动的服务容器。首次源码构建需要访问 Ubuntu、PyTorch、GitHub 和 Python 包源，耗时和磁盘占用显著高于后续复用镜像的运行。
 
 所有网络访问默认直连，不会自动读取某台开发服务器的代理。只有所在网络确实需要代理时才显式覆盖，例如：
 

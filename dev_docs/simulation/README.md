@@ -18,4 +18,6 @@
 - [HiSim 与 llm-ep-simulator 对比](comparisons/hisim_vs_llm_ep_simulator_comparison.md)
 - [llm-ep-simulator 参考评估](evaluations/llm_ep_simulator_reference_assessment.md)
 
+`third_party/llm-ep-simulator` 作为固定提交的第三个 submodule 随 recursive clone 获取，仅供未来开发参考；当前未与 HiSim runtime 集成，也不进入 Docker 镜像。
+
 所有性能数字均为仿真或历史集成证据，不能当作实体 GPU 实测、独立校准或容量承诺。

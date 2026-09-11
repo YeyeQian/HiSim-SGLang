@@ -8,6 +8,7 @@ source "${repo_root}/configs/versions.env"
 
 test "${TAIR_KVCACHE_COMMIT}" = "a6e5d176c96009ba76c0ebb70e83cfb113fe9e65"
 test "${SGLANG_COMMIT}" = "5c8bd8b51b53b9b39eb1edec582ee43b21002106"
+test "${LLM_EP_SIMULATOR_COMMIT}" = "57df62e5fe4243196554a85697dc64b68b7388ac"
 test "${SGLANG_VERSION}" = "0.5.6.post2"
 test "${AICONFIGURATOR_COMMIT}" = "9f744a1910f317a091c88ade644d61094ea22119"
 test "${LATENCY_PRISM_COMMIT}" = "d242ca5b8d7217e1d235d2fb225ff4a8ba24995a"
@@ -20,5 +21,6 @@ test "${UBUNTU_2204_IMAGE}" = "ubuntu:22.04@sha256:3b06811b2afd352be909dd088a004
 
 test "$(git -C "${repo_root}/third_party/tair-kvcache" rev-parse HEAD)" = "${TAIR_KVCACHE_COMMIT}"
 test "$(git -C "${repo_root}/third_party/sglang" rev-parse HEAD)" = "${SGLANG_COMMIT}"
+test "$(git -C "${repo_root}/third_party/llm-ep-simulator" rev-parse HEAD)" = "${LLM_EP_SIMULATOR_COMMIT}"
 test "$(sed -n '1p' "${repo_root}/configs/assets.sha256")" = "${H20_AIC_SHA256}  H20_AIC.zip"
 test "$(sed -n '2p' "${repo_root}/configs/assets.sha256")" = "${SHAREGPT_SHA256}  ShareGPT_V3_unfiltered_cleaned_split.json"

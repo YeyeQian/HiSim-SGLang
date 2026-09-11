@@ -10,6 +10,8 @@
 
 HiSim + SGLang 与其定位不同：前者保留真实 SGLang HTTP、请求队列和调度流程，并由 predictor 为实际调度 batch 提供模拟 forward latency；后者不含 serving 控制面，而是在给定静态配置和 Local Batch 后，对一个封闭的 DeepSeek-V3 Decode 模型进行细粒度分析。二者具有互补关系，但当前尚未完成集成。
 
+`third_party/llm-ep-simulator` 已作为固定提交的参考型 submodule 纳入仓库，recursive clone 会获取其源码。它当前不安装进 Docker 镜像，不参与 HiSim runtime 或 preflight；纳入源码管理不代表二者已经集成。
+
 ```mermaid
 flowchart LR
     subgraph HS["HiSim + SGLang：Serving 控制面"]

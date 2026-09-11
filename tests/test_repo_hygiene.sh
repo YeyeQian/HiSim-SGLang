@@ -12,7 +12,6 @@ fail() {
 ignored_paths=(
   .local_docs/private.md
   .worktrees/feature-copy/file
-  third_party/llm-ep-simulator/README.md
   HISIM_SGLANG_CPU_DOCKER_HANDOFF.md
   dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md
   cache/huggingface/config.json
@@ -30,7 +29,7 @@ for path in "${ignored_paths[@]}"; do
 done
 
 [[ -f .dockerignore ]] || fail '.dockerignore is missing'
-for path in "${ignored_paths[@]}" .git/config third_party/sglang/.git third_party/tair-kvcache/.git .superpowers/private/report.md; do
+for path in "${ignored_paths[@]}" .git/config third_party/sglang/.git third_party/tair-kvcache/.git third_party/llm-ep-simulator/.git .superpowers/private/report.md; do
   python3 - ".dockerignore" "${path}" <<'PYTHON' || fail ".dockerignore does not exclude ${path}"
 import fnmatch
 import pathlib
@@ -66,10 +65,19 @@ if git ls-files '.superpowers/**' | grep -q .; then
   fail 'generated root .superpowers workspace content remains tracked'
 fi
 
-for submodule in third_party/sglang third_party/tair-kvcache; do
+for submodule in third_party/sglang third_party/tair-kvcache third_party/llm-ep-simulator; do
   mode="$(git ls-files -s -- "${submodule}" | awk '{print $1}')"
   [[ "${mode}" = 160000 ]] || fail "${submodule} is not a gitlink"
 done
+
+[[ "$(git config --file .gitmodules --get submodule.third_party/llm-ep-simulator.url)" = \
+  'https://github.com/YeyeQian/llm-ep-simulator.git' ]] ||
+  fail 'llm-ep-simulator submodule URL is not pinned to the expected repository'
+if git config --file .gitmodules --get submodule.third_party/llm-ep-simulator.branch >/dev/null; then
+  fail 'llm-ep-simulator submodule must not follow a moving branch'
+fi
+git check-ignore --no-index -q -- third_party/llm-ep-simulator/README.md &&
+  fail 'llm-ep-simulator remains excluded from Git tracking'
 
 max_blob_bytes=$((10 * 1024 * 1024))
 while read -r mode object stage path; do
