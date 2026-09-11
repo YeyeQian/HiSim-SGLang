@@ -42,12 +42,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-proxy="$(proxy_url)"
-curl --fail --location --silent --show-error \
-  --proxy "${proxy}" \
+curl_args=(--fail --location --silent --show-error)
+append_curl_proxy_args curl_args
+curl_args+=(
   --connect-timeout 10 --max-time 1800 \
   --retry 2 --retry-delay 2 --retry-max-time 5400 \
-  --output "${partial}" "${url}" ||
+  --output "${partial}" "${url}"
+)
+curl "${curl_args[@]}" ||
   die "ShareGPT download failed after bounded retries"
 
 actual_size="$(stat -c %s "${partial}")"

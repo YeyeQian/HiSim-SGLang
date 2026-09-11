@@ -28,13 +28,31 @@ ss() {
 }
 
 curl() {
+  printf '%s\n' "$*" >>"${TEST_CURL_LOG}"
   [[ "$*" = *http://proxy.example.test:3128* ]]
 }
 
 export -f curl docker df git ss
 
-DOCKER_PROJECT_PROXY=http://proxy.example.test:3128 \
-  bash "${repo_root}/scripts/preflight.sh" >/dev/null
+curl_log="$(mktemp)"
+trap 'rm -f "${curl_log}"' EXIT
+export TEST_CURL_LOG="${curl_log}"
+
+for proxy_setting in unset empty direct; do
+  : >"${curl_log}"
+  case "${proxy_setting}" in
+    unset) preflight_output="$(env -u DOCKER_PROJECT_PROXY TEST_CURL_LOG="${curl_log}" bash "${repo_root}/scripts/preflight.sh")" ;;
+    empty) preflight_output="$(DOCKER_PROJECT_PROXY= bash "${repo_root}/scripts/preflight.sh")" ;;
+    direct) preflight_output="$(DOCKER_PROJECT_PROXY=direct bash "${repo_root}/scripts/preflight.sh")" ;;
+  esac
+  grep -q 'network mode is direct' <<<"${preflight_output}"
+  test ! -s "${curl_log}"
+done
+
+preflight_output="$(DOCKER_PROJECT_PROXY=http://proxy.example.test:3128 \
+  bash "${repo_root}/scripts/preflight.sh")"
+grep -q 'network mode uses proxy http://proxy.example.test:3128' <<<"${preflight_output}"
+grep -F -- '--proxy http://proxy.example.test:3128' "${curl_log}" >/dev/null
 echo "valid non-loopback proxy override: PASS"
 
 # A listener on the requested port must not make an unrelated hostname valid.

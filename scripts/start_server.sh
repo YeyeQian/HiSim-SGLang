@@ -76,10 +76,9 @@ runtime_gid=10001
 chmod 0777 "${cache_dir}" "${run_dir}"
 du -sk -- "${cache_dir}" >"${server_dir}/cache-before.txt"
 
-# Download only public model configuration and tokenizer assets while host
-# networking can reach the host-loopback proxy. The serving container remains
+# Download only public model configuration and tokenizer assets with the
+# selected host network mode. The serving container remains
 # bridge-networked and uses this cache offline; no model class is instantiated.
-proxy="$(proxy_url)"
 metadata_code='from transformers import AutoConfig, AutoTokenizer; model="Qwen/Qwen3-8B"; AutoConfig.from_pretrained(model); AutoTokenizer.from_pretrained(model)'
 metadata_args=(
   run --rm
@@ -87,10 +86,9 @@ metadata_args=(
   --network host
   --label com.hisim-sglang.role=metadata
   --user "${runtime_uid}:${runtime_gid}"
-  --env "HTTP_PROXY=${proxy}"
-  --env "HTTPS_PROXY=${proxy}"
-  --env "http_proxy=${proxy}"
-  --env "https_proxy=${proxy}"
+)
+append_docker_proxy_env_args metadata_args
+metadata_args+=(
   --volume "${cache_dir}:/home/app/.cache/huggingface:rw"
   "${image}" shell -c "python -c '${metadata_code}'"
 )
@@ -108,9 +106,13 @@ cleanup_metadata() {
   docker rm "${metadata_id}" >/dev/null 2>&1 || true
 }
 
-printf 'timeout %qs docker run --rm --name %q --network host --label com.hisim-sglang.role=metadata --env HTTP_PROXY=<redacted> --env HTTPS_PROXY=<redacted> --volume %q %q shell -c <metadata-only-python>\n' \
-  "${metadata_timeout}" "${metadata_name}" "${cache_dir}:/home/app/.cache/huggingface:rw" "${image}" \
-  >"${server_dir}/metadata-command.txt"
+if [[ "$(network_mode)" = proxy ]]; then
+  printf 'timeout %qs docker run --rm --name %q --network host --label com.hisim-sglang.role=metadata --env HTTP_PROXY=<redacted> --env HTTPS_PROXY=<redacted> --env http_proxy=<redacted> --env https_proxy=<redacted> --volume %q %q shell -c <metadata-only-python>\n' \
+    "${metadata_timeout}" "${metadata_name}" "${cache_dir}:/home/app/.cache/huggingface:rw" "${image}"
+else
+  printf 'timeout %qs docker run --rm --name %q --network host --label com.hisim-sglang.role=metadata --volume %q %q shell -c <metadata-only-python>\n' \
+    "${metadata_timeout}" "${metadata_name}" "${cache_dir}:/home/app/.cache/huggingface:rw" "${image}"
+fi >"${server_dir}/metadata-command.txt"
 trap cleanup_metadata EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

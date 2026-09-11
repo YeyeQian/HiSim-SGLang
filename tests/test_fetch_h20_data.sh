@@ -92,4 +92,33 @@ grep -F -- '--connect-timeout 10' "${fake_curl_log}" >/dev/null
 grep -F -- '--max-time 60' "${fake_curl_log}" >/dev/null
 grep -F -- '--proxy http://127.0.0.1:28999' "${fake_curl_log}" >/dev/null
 
+for proxy_setting in unset empty direct; do
+  : >"${fake_curl_log}"
+  direct_archive="${tmp_dir}/${proxy_setting}/H20_AIC.zip"
+  direct_asset="${tmp_dir}/${proxy_setting}-asset"
+  set +e
+  case "${proxy_setting}" in
+    unset)
+      env -u DOCKER_PROJECT_PROXY PATH="${fake_bin}:${PATH}" FAKE_CURL_LOG="${fake_curl_log}" \
+        H20_AIC_URL='https://example.invalid/H20_AIC.zip' H20_AIC_SHA256="${bad_sha}" H20_AIC_SIZE=1 \
+        H20_AIC_ARCHIVE="${direct_archive}" H20_AIC_DIR="${direct_asset}" \
+        bash "${repo_root}/scripts/fetch_h20_data.sh" >/dev/null 2>&1
+      ;;
+    empty | direct)
+      PATH="${fake_bin}:${PATH}" FAKE_CURL_LOG="${fake_curl_log}" DOCKER_PROJECT_PROXY="${proxy_setting/empty/}" \
+        H20_AIC_URL='https://example.invalid/H20_AIC.zip' H20_AIC_SHA256="${bad_sha}" H20_AIC_SIZE=1 \
+        H20_AIC_ARCHIVE="${direct_archive}" H20_AIC_DIR="${direct_asset}" \
+        bash "${repo_root}/scripts/fetch_h20_data.sh" >/dev/null 2>&1
+      ;;
+  esac
+  direct_status=$?
+  set -e
+  test "${direct_status}" -ne 0
+  test "$(wc -l <"${fake_curl_log}")" -eq 3
+  if grep -F -- '--proxy' "${fake_curl_log}" >/dev/null; then
+    echo "${proxy_setting} direct download unexpectedly passed a proxy argument" >&2
+    exit 1
+  fi
+done
+
 echo "test_fetch_h20_data.sh: PASS"

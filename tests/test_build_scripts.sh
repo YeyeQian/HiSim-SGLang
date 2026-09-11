@@ -85,6 +85,30 @@ for expected in \
   }
 done
 
+for proxy_setting in unset empty direct; do
+  : >"${record_dir}/docker-args"
+  case "${proxy_setting}" in
+    unset)
+      env -u DOCKER_PROJECT_PROXY PATH="${fake_bin}:${PATH}" TEST_RECORD_DIR="${record_dir}" \
+        bash "${fixture_root}/scripts/build.sh" >/dev/null
+      ;;
+    empty)
+      PATH="${fake_bin}:${PATH}" TEST_RECORD_DIR="${record_dir}" DOCKER_PROJECT_PROXY= \
+        bash "${fixture_root}/scripts/build.sh" >/dev/null
+      ;;
+    direct)
+      PATH="${fake_bin}:${PATH}" TEST_RECORD_DIR="${record_dir}" DOCKER_PROJECT_PROXY=direct \
+        bash "${fixture_root}/scripts/build.sh" >/dev/null
+      ;;
+  esac
+  direct_build_args="$(cat "${record_dir}/docker-args")"
+  [[ "${direct_build_args}" = *'build --network host --progress=plain'* ]]
+  [[ "${direct_build_args}" != *'HTTP_PROXY'* ]]
+  [[ "${direct_build_args}" != *'HTTPS_PROXY'* ]]
+  [[ "${direct_build_args}" != *'http_proxy'* ]]
+  [[ "${direct_build_args}" != *'https_proxy'* ]]
+done
+
 : >"${record_dir}/docker-args"
 set +e
 PATH="${fake_bin}:${PATH}" TEST_RECORD_DIR="${record_dir}" TEST_IMAGE_EXISTS=0 \

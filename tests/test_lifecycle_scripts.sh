@@ -108,6 +108,7 @@ export FAKE_TIMEOUT_LOG="${tmp_dir}/timeout.log"
 export RESULTS_ROOT="${tmp_dir}/results"
 export HF_CACHE_DIR="${tmp_dir}/cache"
 export READINESS_INTERVAL_SECONDS=0
+unset DOCKER_PROJECT_PROXY
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -174,8 +175,10 @@ fi
 bash "${root_dir}/scripts/start_server.sh" generic
 assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke-metadata --network host'
 assert_contains "${FAKE_DOCKER_LOG}" '--label com.hisim-sglang.role=metadata'
-assert_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY=http://127.0.0.1:17897'
-assert_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY=http://127.0.0.1:17897'
+assert_not_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY='
+assert_not_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY='
+assert_not_contains "${FAKE_DOCKER_LOG}" '--env http_proxy='
+assert_not_contains "${FAKE_DOCKER_LOG}" '--env https_proxy='
 assert_contains "${FAKE_DOCKER_LOG}" 'AutoConfig.from_pretrained'
 assert_contains "${FAKE_DOCKER_LOG}" 'AutoTokenizer.from_pretrained'
 assert_not_contains "${FAKE_DOCKER_LOG}" 'AutoModel.from_pretrained'
@@ -201,6 +204,23 @@ assert_contains "${FAKE_DOCKER_LOG}" "${run_dir}:/results:rw"
 [[ "$(stat -c %a "${run_dir}")" = 777 ]] || fail 'result root must be writable by the fixed non-root image UID'
 [[ -f "${run_dir}/server/generic/launch.env" ]] || fail 'start must save launch metadata'
 [[ -f "${run_dir}/server/generic/cache-before.txt" ]] || fail 'start must save cache size'
+
+for proxy_setting in empty direct; do
+  : >"${FAKE_DOCKER_LOG}"
+  DOCKER_PROJECT_PROXY="${proxy_setting/empty/}" bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+  assert_contains "${FAKE_DOCKER_LOG}" 'run --rm --name hisim-sglang-cpu-smoke-metadata --network host'
+  assert_not_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY='
+  assert_not_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY='
+  assert_not_contains "${FAKE_DOCKER_LOG}" '--env http_proxy='
+  assert_not_contains "${FAKE_DOCKER_LOG}" '--env https_proxy='
+done
+
+: >"${FAKE_DOCKER_LOG}"
+DOCKER_PROJECT_PROXY=http://127.0.0.1:17897 bash "${root_dir}/scripts/start_server.sh" generic >/dev/null
+assert_contains "${FAKE_DOCKER_LOG}" '--env HTTP_PROXY=http://127.0.0.1:17897'
+assert_contains "${FAKE_DOCKER_LOG}" '--env HTTPS_PROXY=http://127.0.0.1:17897'
+assert_contains "${FAKE_DOCKER_LOG}" '--env http_proxy=http://127.0.0.1:17897'
+assert_contains "${FAKE_DOCKER_LOG}" '--env https_proxy=http://127.0.0.1:17897'
 
 FAKE_PORT_BUSY=1
 export FAKE_PORT_BUSY

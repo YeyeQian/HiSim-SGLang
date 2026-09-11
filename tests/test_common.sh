@@ -8,8 +8,40 @@ common="${repo_root}/scripts/lib/common.sh"
 source "${common}"
 
 test "$(project_root)" = "${repo_root}"
-test "$(proxy_url)" = "http://127.0.0.1:17897"
+test "$(env -u DOCKER_PROJECT_PROXY bash -c 'source "$1"; network_mode' _ "${common}")" = direct
+test "$(DOCKER_PROJECT_PROXY= network_mode)" = direct
+test "$(DOCKER_PROJECT_PROXY=direct network_mode)" = direct
+test "$(DOCKER_PROJECT_PROXY=http://127.0.0.1:12345 network_mode)" = proxy
 test "$(DOCKER_PROJECT_PROXY=http://127.0.0.1:12345 proxy_url)" = "http://127.0.0.1:12345"
+
+for proxy_setting in unset empty direct; do
+  proxy_args=(sentinel)
+  build_args=(sentinel)
+  env_args=(sentinel)
+  case "${proxy_setting}" in
+    unset) unset DOCKER_PROJECT_PROXY ;;
+    empty) DOCKER_PROJECT_PROXY= ;;
+    direct) DOCKER_PROJECT_PROXY=direct ;;
+  esac
+  append_curl_proxy_args proxy_args
+  append_docker_build_proxy_args build_args
+  append_docker_proxy_env_args env_args
+  test "${proxy_args[*]}" = sentinel
+  test "${build_args[*]}" = sentinel
+  test "${env_args[*]}" = sentinel
+done
+
+DOCKER_PROJECT_PROXY=http://proxy.example.test:3128
+proxy_args=()
+build_args=()
+env_args=()
+append_curl_proxy_args proxy_args
+append_docker_build_proxy_args build_args
+append_docker_proxy_env_args env_args
+test "${proxy_args[*]}" = '--proxy http://proxy.example.test:3128'
+test "${build_args[*]}" = '--build-arg HTTP_PROXY=http://proxy.example.test:3128 --build-arg HTTPS_PROXY=http://proxy.example.test:3128 --build-arg http_proxy=http://proxy.example.test:3128 --build-arg https_proxy=http://proxy.example.test:3128'
+test "${env_args[*]}" = '--env HTTP_PROXY=http://proxy.example.test:3128 --env HTTPS_PROXY=http://proxy.example.test:3128 --env http_proxy=http://proxy.example.test:3128 --env https_proxy=http://proxy.example.test:3128'
+unset DOCKER_PROJECT_PROXY
 
 require_command sh
 missing_output="$(require_command definitely-not-a-real-command 2>&1 || true)"

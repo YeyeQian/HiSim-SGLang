@@ -86,4 +86,32 @@ if grep -E -- '(^| )(-k|--insecure)( |$)' "${fake_curl_log}" >/dev/null; then
   exit 1
 fi
 
+for proxy_setting in unset empty direct; do
+  : >"${fake_curl_log}"
+  direct_dataset="${tmp_dir}/${proxy_setting}/sharegpt.json"
+  set +e
+  case "${proxy_setting}" in
+    unset)
+      env -u DOCKER_PROJECT_PROXY PATH="${fake_bin}:${PATH}" FAKE_CURL_LOG="${fake_curl_log}" \
+        SHAREGPT_URL='https://example.invalid/sharegpt.json' SHAREGPT_SHA256="${fixture_sha}" \
+        SHAREGPT_SIZE="${fixture_size}" SHAREGPT_DATASET="${direct_dataset}" \
+        bash "${repo_root}/scripts/fetch_sharegpt_data.sh" >/dev/null 2>&1
+      ;;
+    empty | direct)
+      PATH="${fake_bin}:${PATH}" FAKE_CURL_LOG="${fake_curl_log}" DOCKER_PROJECT_PROXY="${proxy_setting/empty/}" \
+        SHAREGPT_URL='https://example.invalid/sharegpt.json' SHAREGPT_SHA256="${fixture_sha}" \
+        SHAREGPT_SIZE="${fixture_size}" SHAREGPT_DATASET="${direct_dataset}" \
+        bash "${repo_root}/scripts/fetch_sharegpt_data.sh" >/dev/null 2>&1
+      ;;
+  esac
+  direct_status=$?
+  set -e
+  test "${direct_status}" -ne 0
+  test "$(wc -l <"${fake_curl_log}")" -eq 1
+  if grep -F -- '--proxy' "${fake_curl_log}" >/dev/null; then
+    echo "${proxy_setting} direct download unexpectedly passed a proxy argument" >&2
+    exit 1
+  fi
+done
+
 echo 'test_fetch_sharegpt_data.sh: PASS'
