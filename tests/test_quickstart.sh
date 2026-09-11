@@ -22,7 +22,7 @@ set -euo pipefail
 printf 'pins\n' >>"${QUICKSTART_LOG}"
 EOF
 
-for script_name in preflight build inspect_image wait_ready; do
+for script_name in preflight wait_ready; do
   cat >"${fixture_root}/scripts/${script_name}.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -31,10 +31,19 @@ exit "\${FAIL_${script_name^^}:-0}"
 EOF
 done
 
+for script_name in build inspect_image; do
+  cat >"${fixture_root}/scripts/${script_name}.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+printf '${script_name}:image=%s|%s\n' "\${IMAGE_TAG-<unset>}" "\${HISIM_IMAGE-<unset>}" >>"\${QUICKSTART_LOG}"
+exit "\${FAIL_${script_name^^}:-0}"
+EOF
+done
+
 cat >"${fixture_root}/scripts/start_server.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'start:%s\n' "$*" >>"${QUICKSTART_LOG}"
+printf 'start:%s|image=%s|%s\n' "$*" "${IMAGE_TAG-<unset>}" "${HISIM_IMAGE-<unset>}" >>"${QUICKSTART_LOG}"
 exit "${FAIL_START:-0}"
 EOF
 
@@ -54,7 +63,8 @@ EOF
 cat >"${fixture_root}/scripts/validate_results.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'validate:%s|%s|%s\n' "$1" "$2" "$3" >>"${QUICKSTART_LOG}"
+printf 'validate:%s|%s|%s|image=%s|%s\n' \
+  "$1" "$2" "$3" "${IMAGE_TAG-<unset>}" "${HISIM_IMAGE-<unset>}" >>"${QUICKSTART_LOG}"
 exit "${FAIL_VALIDATE:-0}"
 EOF
 
@@ -70,23 +80,60 @@ export PATH="${fake_bin}:${PATH}"
 export QUICKSTART_LOG="${tmp_dir}/quickstart.log"
 export RESULTS_ROOT="${tmp_dir}/results"
 export HISIM_CONTAINER_NAME=hisim-sglang-cpu-smoke
+unset IMAGE_TAG HISIM_IMAGE
 
 : >"${QUICKSTART_LOG}"
-bash "${fixture_root}/scripts/quickstart.sh"
+env -u IMAGE_TAG -u HISIM_IMAGE bash "${fixture_root}/scripts/quickstart.sh"
 expected_bench="${RESULTS_ROOT}/run one/benchmark/generic/probe/invocation"
 cat >"${tmp_dir}/expected-success.log" <<EOF
 submodules:-C ${fixture_root} submodule update --init --recursive
 pins
 preflight
-build
-inspect_image
-start:generic
+build:image=hisim-sglang-cpu:0.5.6.post2|hisim-sglang-cpu:0.5.6.post2
+inspect_image:image=hisim-sglang-cpu:0.5.6.post2|hisim-sglang-cpu:0.5.6.post2
+start:generic|image=hisim-sglang-cpu:0.5.6.post2|hisim-sglang-cpu:0.5.6.post2
 wait_ready
 benchmark:generic probe
-validate:${expected_bench}|probe|upstream_generic_mock
+validate:${expected_bench}|probe|upstream_generic_mock|image=hisim-sglang-cpu:0.5.6.post2|hisim-sglang-cpu:0.5.6.post2
 stop
 EOF
 cmp "${tmp_dir}/expected-success.log" "${QUICKSTART_LOG}"
+
+assert_unified_image() {
+  local expected_image="$1"
+  for stage in build inspect_image start validate; do
+    grep -F "${stage}:" "${QUICKSTART_LOG}" | grep -Fq \
+      "image=${expected_image}|${expected_image}" || {
+      printf '%s did not receive unified image %s\n' "${stage}" "${expected_image}" >&2
+      exit 1
+    }
+  done
+}
+
+: >"${QUICKSTART_LOG}"
+env -u HISIM_IMAGE IMAGE_TAG=registry.example/by-tag:test \
+  bash "${fixture_root}/scripts/quickstart.sh" >/dev/null
+assert_unified_image registry.example/by-tag:test
+
+: >"${QUICKSTART_LOG}"
+env -u IMAGE_TAG HISIM_IMAGE=registry.example/by-runtime:test \
+  bash "${fixture_root}/scripts/quickstart.sh" >/dev/null
+assert_unified_image registry.example/by-runtime:test
+
+: >"${QUICKSTART_LOG}"
+IMAGE_TAG=registry.example/same:test HISIM_IMAGE=registry.example/same:test \
+  bash "${fixture_root}/scripts/quickstart.sh" >/dev/null
+assert_unified_image registry.example/same:test
+
+: >"${QUICKSTART_LOG}"
+set +e
+IMAGE_TAG=registry.example/build:test HISIM_IMAGE=registry.example/runtime:test \
+  bash "${fixture_root}/scripts/quickstart.sh" >"${tmp_dir}/conflict.stdout" 2>"${tmp_dir}/conflict.stderr"
+conflict_status=$?
+set -e
+[[ "${conflict_status}" -ne 0 ]]
+[[ ! -s "${QUICKSTART_LOG}" ]]
+grep -Fq 'IMAGE_TAG and HISIM_IMAGE must match' "${tmp_dir}/conflict.stderr"
 
 : >"${QUICKSTART_LOG}"
 set +e

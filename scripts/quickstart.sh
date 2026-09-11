@@ -3,6 +3,13 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "${script_dir}/.." && pwd -P)"
+if [[ -v IMAGE_TAG && -v HISIM_IMAGE && "${IMAGE_TAG}" != "${HISIM_IMAGE}" ]]; then
+  printf 'ERROR: IMAGE_TAG and HISIM_IMAGE must match when both are set\n' >&2
+  exit 1
+fi
+image="${HISIM_IMAGE:-${IMAGE_TAG:-hisim-sglang-cpu:0.5.6.post2}}"
+export IMAGE_TAG="${image}"
+export HISIM_IMAGE="${image}"
 results_root="${RESULTS_ROOT:-${repo_root}/results}"
 container_name="${HISIM_CONTAINER_NAME:-hisim-sglang-cpu-smoke}"
 state_dir="${results_root}/.state/${container_name}"
