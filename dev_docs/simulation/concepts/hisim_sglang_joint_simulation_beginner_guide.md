@@ -1,4 +1,4 @@
-# HiSim + SGLang 联合仿真新手说明
+# HiSim + SGLang 联合仿真说明
 
 ## 一句话概括
 
@@ -41,18 +41,20 @@ random-ids / ShareGPT 请求
 
 这里有一个非常重要的区别：
 
-| 环节 | 是否真实执行 |
-| --- | --- |
-| Docker 容器启动 | 是 |
-| SGLang HTTP 服务 | 是 |
-| benchmark 发 HTTP 请求 | 是 |
-| SGLang 请求队列和 batch 调度 | 是 |
-| ShareGPT 文本采样与 Token 长度 | 是 |
-| Qwen3-8B 完整权重加载 | 否 |
-| Qwen3-8B 神经网络 forward | 否 |
-| H20/H100 GPU kernel 执行 | 否 |
-| 推理耗时 | HiSim 预测 |
-| 回答内容与语义质量 | 不评测 |
+
+| 环节                      | 是否真实执行   |
+| ----------------------- | -------- |
+| Docker 容器启动             | 是        |
+| SGLang HTTP 服务          | 是        |
+| benchmark 发 HTTP 请求     | 是        |
+| SGLang 请求队列和 batch 调度   | 是        |
+| ShareGPT 文本采样与 Token 长度 | 是        |
+| Qwen3-8B 完整权重加载         | 否        |
+| Qwen3-8B 神经网络 forward   | 否        |
+| H20/H100 GPU kernel 执行  | 否        |
+| 推理耗时                    | HiSim 预测 |
+| 回答内容与语义质量               | 不评测      |
+
 
 因此它测试的是“推理服务的性能形态”，不是“大模型是否回答正确”。
 

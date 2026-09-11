@@ -1,5 +1,6 @@
 .worktrees/
 .superpowers/
+.local_docs/
 cache/
 results/
 logs/
