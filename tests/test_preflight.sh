@@ -32,22 +32,65 @@ curl() {
   [[ "$*" = *http://proxy.example.test:3128* ]]
 }
 
-export -f curl docker df git ss
+uname() {
+  case "${1:-}" in
+    -s) printf '%s\n' "${TEST_UNAME_SYSTEM:-Linux}" ;;
+    *) printf '%s\n' "${TEST_UNAME_MACHINE:-x86_64}" ;;
+  esac
+}
+
+command() {
+  if [[ "${1:-}" = -v ]]; then
+    printf '%s\n' "${2:-}" >>"${TEST_COMMAND_LOG}"
+    if [[ "${TEST_HIDE_DOWNLOAD_TOOLS:-0}" = 1 ]]; then
+      case "${2:-}" in
+        curl | sha256sum | unzip) return 1 ;;
+      esac
+    fi
+  fi
+  builtin command "$@"
+}
+
+export -f command curl docker df git ss uname
 
 curl_log="$(mktemp)"
-trap 'rm -f "${curl_log}"' EXIT
+command_log="$(mktemp)"
+trap 'rm -f "${curl_log}" "${command_log}"' EXIT
 export TEST_CURL_LOG="${curl_log}"
+export TEST_COMMAND_LOG="${command_log}"
 
 for proxy_setting in unset empty direct; do
   : >"${curl_log}"
   case "${proxy_setting}" in
-    unset) preflight_output="$(env -u DOCKER_PROJECT_PROXY TEST_CURL_LOG="${curl_log}" bash "${repo_root}/scripts/preflight.sh")" ;;
-    empty) preflight_output="$(DOCKER_PROJECT_PROXY= bash "${repo_root}/scripts/preflight.sh")" ;;
-    direct) preflight_output="$(DOCKER_PROJECT_PROXY=direct bash "${repo_root}/scripts/preflight.sh")" ;;
+    unset) preflight_output="$(env -u DOCKER_PROJECT_PROXY TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_CURL_LOG="${curl_log}" bash "${repo_root}/scripts/preflight.sh")" ;;
+    empty) preflight_output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 DOCKER_PROJECT_PROXY= bash "${repo_root}/scripts/preflight.sh")" ;;
+    direct) preflight_output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 DOCKER_PROJECT_PROXY=direct bash "${repo_root}/scripts/preflight.sh")" ;;
   esac
   grep -q 'network mode is direct' <<<"${preflight_output}"
   test ! -s "${curl_log}"
 done
+
+if grep -Eq '^(curl|sha256sum|unzip)$' "${command_log}"; then
+  echo 'direct generic preflight required a download/archive-only tool' >&2
+  exit 1
+fi
+echo 'minimal generic tool requirements: PASS'
+
+output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_UNAME_MACHINE=aarch64 DOCKER_PROJECT_PROXY=direct \
+  bash "${repo_root}/scripts/preflight.sh" 2>&1)" && {
+  echo 'preflight accepted an unsupported non-x86_64 host' >&2
+  exit 1
+}
+grep -q 'requires Linux x86_64' <<<"${output}"
+echo 'unsupported architecture rejection: PASS'
+
+output="$(TEST_HIDE_DOWNLOAD_TOOLS=1 TEST_UNAME_SYSTEM=Darwin DOCKER_PROJECT_PROXY=direct \
+  bash "${repo_root}/scripts/preflight.sh" 2>&1)" && {
+  echo 'preflight accepted a non-Linux host' >&2
+  exit 1
+}
+grep -q 'requires Linux x86_64' <<<"${output}"
+echo 'unsupported operating system rejection: PASS'
 
 preflight_output="$(DOCKER_PROJECT_PROXY=http://proxy.example.test:3128 \
   bash "${repo_root}/scripts/preflight.sh")"

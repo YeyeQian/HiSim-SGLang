@@ -72,14 +72,15 @@ RUN for attempt in 1 2 3; do \
     && git lfs version | grep -F "git-lfs/${GIT_LFS_VERSION}" \
     && rm -f /tmp/git-lfs.tar.gz
 
-RUN for attempt in 1 2 3; do \
-      rm -rf /opt/src/aiconfigurator; \
-      timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout \
-          https://github.com/ai-dynamo/aiconfigurator.git /opt/src/aiconfigurator \
+RUN rm -rf /opt/src/aiconfigurator \
+    && git init /opt/src/aiconfigurator \
+    && git -C /opt/src/aiconfigurator remote add origin https://github.com/ai-dynamo/aiconfigurator.git \
+    && for attempt in 1 2 3; do \
+      GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}" \
         && break; \
       test "${attempt}" -lt 3 || exit 1; \
     done \
-    && GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}" \
+    && GIT_LFS_SKIP_SMUDGE=1 git -C /opt/src/aiconfigurator checkout --detach FETCH_HEAD \
     && for attempt in 1 2 3; do \
       if [ -d /opt/src/aiconfigurator/.git/lfs/incomplete ]; then \
         find /opt/src/aiconfigurator/.git/lfs/incomplete -type f -delete || exit 1; \

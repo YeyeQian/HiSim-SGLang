@@ -1,5 +1,7 @@
 # HiSim 与 llm-ep-simulator 对比
 
+[返回仿真文档导航](../README.md)
+
 ## 1. 结论概览
 
 HiSim 与 `third_party/llm-ep-simulator` 都是不执行真实 GPU kernel 的性能模拟工具，但关注层级不同：

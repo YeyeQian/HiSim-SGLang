@@ -8,6 +8,11 @@ overall_status=0
 
 while IFS= read -r -d '' test_script; do
   relative_path="${test_script#"${repo_root}/"}"
+  if ! bash -n "${test_script}"; then
+    printf 'SYNTAX FAIL: %s\n' "${relative_path}"
+    overall_status=1
+    continue
+  fi
   if bash "${test_script}"; then
     printf 'PASS: %s\n' "${relative_path}"
   else

@@ -9,7 +9,12 @@ repo_root="$(project_root)"
 # shellcheck source=/dev/null
 source "${repo_root}/configs/versions.env"
 
-for command_name in docker git curl sha256sum unzip ss; do
+kernel_name="$(uname -s)"
+machine_arch="$(uname -m)"
+[[ "${kernel_name}" = Linux && "${machine_arch}" = x86_64 ]] ||
+  die "this source build requires Linux x86_64; found ${kernel_name} ${machine_arch}"
+
+for command_name in docker git ss; do
   require_command "${command_name}"
 done
 
@@ -21,6 +26,7 @@ selected_mode="$(network_mode)"
 if [[ "${selected_mode}" = direct ]]; then
   printf 'Preflight network mode is direct.\n'
 else
+  require_command curl
   selected_proxy="$(proxy_url)"
   if [[ "${selected_proxy}" =~ ^http://([^/:]+):([0-9]+)/?$ ]]; then
   proxy_host="${BASH_REMATCH[1]}"

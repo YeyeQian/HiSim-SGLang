@@ -112,7 +112,12 @@ Commit the quickstart and its tests.
 - Create: `.dockerignore`
 - Modify: `Dockerfile`
 - Modify: `configs/versions.env`
+- Modify: `scripts/preflight.sh`
+- Modify: `tests/test_preflight.sh`
 - Modify: `README.md`
+- Delete from public Git and preserve under root `.local_docs/`: `HISIM_SGLANG_CPU_DOCKER_HANDOFF.md`
+- Delete from public Git and preserve under root `.local_docs/`: `dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md`
+- Modify: `docs/superpowers/plans/2026-09-08-hisim-sglang-cpu-docker.md`
 - Modify: `dev_docs/simulation/**/*.md`
 - Create: `dev_docs/simulation/README.md`
 - Create: `tests/test_repo_hygiene.sh`
@@ -120,7 +125,7 @@ Commit the quickstart and its tests.
 
 **Step 1: Write failing hygiene/link tests**
 
-Assert `third_party/llm-ep-simulator/`, `.local_docs/`, and generated paths are excluded from Git and Docker build context; required submodules remain gitlinks; no tracked file exceeds the chosen source-release threshold; the AIConfigurator fixed commit can be fetched independently of a moving branch tip; the ShareGPT URL uses its declared revision; and local Markdown links in the reorganized documentation resolve.
+Assert `third_party/llm-ep-simulator/`, `.local_docs/`, the two current-server-only development documents, and generated paths are excluded from Git and Docker build context; required submodules remain gitlinks; no tracked file exceeds the chosen source-release threshold; the AIConfigurator fixed commit can be fetched independently of a moving branch tip; the ShareGPT URL uses its declared revision; generic preflight rejects non-x86_64 while not requiring H20-only archive tools; and local Markdown links in public documentation resolve without referring to removed local-only documents.
 
 **Step 2: Run tests to prove the current gaps**
 
@@ -128,7 +133,7 @@ Run the new hygiene test and capture the expected ignore/link failures.
 
 **Step 3: Update public documentation and ignore rules**
 
-Add `.dockerignore`, make AIConfigurator fixed-commit retrieval independent of the current branch tip, and use the pinned ShareGPT revision in its URL. Add a first-screen GitHub clone + quickstart path, Linux x86_64 target-host requirements, direct-by-default behavior, an explicit proxy override for the current server, resource expectations, the source-build limitation, and manual lifecycle commands. Add a navigation index and repair paths broken by the prior documentation move. Put the local reference checkout and local-only documents in versioned ignore rules.
+Add `.dockerignore`, make AIConfigurator fixed-commit retrieval independent of the current branch tip, and use the pinned ShareGPT revision in its URL. Make generic preflight require only tools used by the generic path and reject unsupported non-x86_64 hosts; H20/ShareGPT download scripts keep checking their own extra tools. Add a first-screen GitHub clone + quickstart path, Linux x86_64 target-host requirements, direct-by-default behavior, an explicit proxy override for the current server, resource expectations, the source-build limitation, and manual lifecycle commands. Add a navigation index and repair paths broken by the prior documentation move. Remove the two server-specific development documents from public Git, remove or rewrite inbound public references, and preserve their byte-identical copies in the root checkout's ignored `.local_docs/`. Put the local reference checkout and local-only documents in versioned ignore rules.
 
 **Step 4: Verify**
 

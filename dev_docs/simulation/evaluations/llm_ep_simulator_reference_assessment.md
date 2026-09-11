@@ -1,5 +1,7 @@
 # llm-ep-simulator 对 HiSim + SGLang 的技术参考评估
 
+[返回仿真文档导航](../README.md)
+
 ## 1. 项目定位
 
 `llm-ep-simulator` 是面向 DeepSeek-V3 Decode 和 Expert Parallelism（EP）的确定性解析模拟器。它以 H800/H20 算子性能数据为锚点，将一次 Decode forward 展开为 61 层的 Operator、Stage 和 Event DAG，估算计算、通信、显存、吞吐、关键路径及资源重叠。

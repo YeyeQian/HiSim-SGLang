@@ -1,10 +1,12 @@
 # HiSim + SGLang CPU-only Docker 实施报告
 
+[返回仿真文档导航](../README.md)
+
 更新日期：2026-09-08
 
 分支：`feature/cpu-docker-smoke`
 
-仓库：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke`
+仓库：公开 GitHub checkout（所有命令均以仓库根目录为基准）
 
 ## 1. 最终结论
 
@@ -73,8 +75,8 @@
 `nvidia-ml-py` 是允许的纯 Python NVML telemetry binding，不提供 CUDA 计算能力。最终 `scripts/inspect_image.sh` 退出 0，并记录：`torch.cuda.is_available(): False`、`/dev/nvidia*: absent`、禁止的 accelerator distributions absent、固定 AIConfigurator commit 与已实体化的 H100 performance data。完整证据位于：
 
 ```text
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/image/
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9/inspect-image.stdout.log
+artifacts/image/
+logs/task9/inspect-image.stdout.log
 ```
 
 ## 4. 数据资产
@@ -84,17 +86,17 @@ H20 archive：
 - URL：`https://raw.githubusercontent.com/kunluninsight/LatencyPrism/d242ca5b8d7217e1d235d2fb225ff4a8ba24995a/Hisim/Data/H20_AIC.zip`
 - size：`9039139` bytes
 - SHA256：`7702dbffe750a9d0f6b7ce547056bfbaa3da5e158ac7fa25e75b057df4792289`
-- archive：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/downloads/H20_AIC.zip`
-- 解压 root：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/h20_aic/aic`
+- archive：`artifacts/downloads/H20_AIC.zip`
+- 解压 root：`artifacts/h20_aic/aic`
 
 H20 downloader 通过 `proxy_url` 把项目代理显式传给 curl，同时保留 10 秒 connect timeout、60 秒 transfer timeout、三次有限尝试、TLS 校验、size/SHA 校验和原子安装。fixture 测试验证了精确的 `--proxy` 参数转发。
 
 ShareGPT：
 
-- URL：`https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json`
+- URL：`https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/192ab2185289094fc556ec8ce5ce1e8e587154ca/ShareGPT_V3_unfiltered_cleaned_split.json`
 - size：`672837942` bytes（641.67 MiB）
 - 实际文件 SHA256：`35f0e213ce091ed9b9af2a1f0755e9d39f9ccec34ab281cd4ca60d70f6479ba4`
-- 文件：`/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/artifacts/downloads/ShareGPT_V3_unfiltered_cleaned_split.json`
+- 文件：`artifacts/downloads/ShareGPT_V3_unfiltered_cleaned_split.json`
 
 ShareGPT 下载通过宿主机代理完成；再次运行 downloader 会重新校验并复用。只有 `start_server.sh generic sharegpt` 才把该文件精确只读挂载为 `/opt/hisim-data/sharegpt.json`。基础 `random-ids` smoke 不需要它，因此断网时仍可在已有 image/tokenizer cache 上执行。
 
@@ -115,8 +117,8 @@ ShareGPT 下载通过宿主机代理完成；再次运行 downloader 会重新�
 fresh 结果的 benchmark 绝对目录：
 
 ```text
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T153202Z-generic-57411/benchmark/generic/probe/20260908T153341080418171-60934
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/results/20260908T153458Z-h20-63247/benchmark/h20/probe/20260908T153748540073386-22337
+results/20260908T153202Z-generic-57411/benchmark/generic/probe/20260908T153341080418171-60934
+results/20260908T153458Z-h20-63247/benchmark/h20/probe/20260908T153748540073386-22337
 ```
 
 两次 provenance 加固后的 fresh probe 均带有执行前生成的 sidecar。generic 映射为 `generic / none / probe / upstream_generic_mock`，H20 映射为 `h20 / none / probe / official_h20_data_path`；两次 validator 都加载 sidecar 后退出 0。cache 均从 `15560 KiB` 变为 `15560 KiB`，delta 为 `0 KiB`；`cache-weight-changes.txt` 均为 0 bytes。ShareGPT 成功运行的 cache delta 也为 `0 KiB`。每个最终服务日志均包含 HiSim config、mock ModelRunner、request barrier 和 simulation results marker；fresh generic 加载 `h100_sxm/sglang/0.5.6.post2`，fresh H20 加载 `h20_sxm/sglang/0.5.6.post2`。禁止运行路径扫描没有命中，且不存在 `guard-failure.txt`。
@@ -137,8 +139,8 @@ git submodule status --recursive
 Task 9 review-fix 记录：聚合测试 `0`、preflight `0`、image inspection `0`；21 个 Python unit tests 和全部 `tests/test_*.sh` 通过。新增测试明确证明：缺失 provenance 会被拒绝；unlabeled generic-shaped metrics 即使 CLI 声明为 H20 也会被拒绝；三类 lifecycle 映射 sidecar 正确；H20 curl 精确接收项目代理。submodule status 精确报告上述两个固定 commits。日志目录：
 
 ```text
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9/
-/data/userhome/zhaoyifan/Work/HiSim-SGLang/.worktrees/cpu-docker-smoke/logs/task9-review-fix/
+logs/task9/
+logs/task9-review-fix/
 ```
 
 fresh generic 与 H20 都依次执行 `start_server.sh`、`wait_ready.sh`、`run_benchmark.sh ... probe`、带 `--provenance` 的 `validate_results.py` 和 `stop_server.sh`，各阶段退出码为 0。具体可复现命令见根目录 `README.md`。

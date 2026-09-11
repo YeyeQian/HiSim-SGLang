@@ -8,7 +8,7 @@
 
 **Tech Stack:** Bash, Docker Engine 20.10, Ubuntu 22.04, Python 3.10+, CPU PyTorch, SGLang `0.5.6.post2`, HiSim, AIConfigurator, Git submodules, curl, sha256sum, unittest-style shell assertions.
 
-**Spec:** `dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md`
+**Public handoff:** [`README.md`](../../../README.md). The original server-specific approval record is intentionally excluded from the public source release.
 
 ## Global Constraints
 
@@ -32,9 +32,9 @@
 
 **Files:**
 - Create: `.gitignore`
-- Track: `HISIM_SGLANG_CPU_DOCKER_HANDOFF.md`
+- Track: `README.md`
 - Track: `docker_network_and_proxy_troubleshooting_guide.md`
-- Track: `dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md`
+- Keep the server-specific approval record outside public Git.
 - Track: `docs/superpowers/plans/2026-09-08-hisim-sglang-cpu-docker.md`
 
 **Interfaces:**
@@ -84,7 +84,7 @@ Expected: every path is matched by `.gitignore`.
 Run:
 
 ```bash
-git add .gitignore HISIM_SGLANG_CPU_DOCKER_HANDOFF.md docker_network_and_proxy_troubleshooting_guide.md dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md docs/superpowers/plans/2026-09-08-hisim-sglang-cpu-docker.md
+git add .gitignore README.md docs/superpowers/plans/2026-09-08-hisim-sglang-cpu-docker.md
 git commit -m "docs: record CPU Docker deployment plan"
 git status --short
 ```

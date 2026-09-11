@@ -56,10 +56,15 @@ require_literal "${dockerfile}" 'pip install --constraint /tmp/requirements.cpu.
 require_literal "${dockerfile}" 'COPY third_party/sglang'
 require_literal "${dockerfile}" 'cp python/pyproject_cpu.toml python/pyproject.toml'
 require_literal "${dockerfile}" 'cp sgl-kernel/pyproject_cpu.toml sgl-kernel/pyproject.toml'
-require_literal "${dockerfile}" 'git clone --depth 1 --branch h20e-higher-acc --single-branch --no-checkout'
+require_literal "${dockerfile}" 'git init /opt/src/aiconfigurator'
+require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator remote add origin https://github.com/ai-dynamo/aiconfigurator.git'
+require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator fetch --depth 1 origin "${AICONFIGURATOR_COMMIT}"'
 require_literal "${dockerfile}" 'GIT_LFS_SKIP_SMUDGE=1'
-require_block "${dockerfile}" $'RUN for attempt in 1 2 3; do \\\n      rm -rf /opt/src/aiconfigurator; \\\n      timeout 120s env GIT_LFS_SKIP_SMUDGE=1 git clone'
-require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach "${AICONFIGURATOR_COMMIT}"'
+require_block "${dockerfile}" $'RUN rm -rf /opt/src/aiconfigurator \\\n    && git init /opt/src/aiconfigurator'
+require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator checkout --detach FETCH_HEAD'
+if grep -Eq 'git clone .*--branch[ =]' "${dockerfile}"; then
+  fail 'AIConfigurator retrieval depends on a moving branch tip'
+fi
 require_block "${dockerfile}" $'    && for attempt in 1 2 3; do \\\n      if [ -d /opt/src/aiconfigurator/.git/lfs/incomplete ]; then \\\n        find /opt/src/aiconfigurator/.git/lfs/incomplete -type f -delete || exit 1; \\\n      fi; \\\n      timeout 300s git -C /opt/src/aiconfigurator lfs pull'
 require_literal "${dockerfile}" 'test -d "${aic_data_dir}"'
 require_literal "${dockerfile}" 'git -C /opt/src/aiconfigurator rev-parse HEAD'

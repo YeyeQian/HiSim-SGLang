@@ -1,5 +1,7 @@
 # HiSim 如何计算 H20 推理延迟
 
+[返回仿真文档导航](../README.md)
+
 ## 1. 结论概览
 
 当前 H20 路径并不是在本服务器上执行 Qwen3-8B 的真实 GPU forward。SGLang 仍负责形成实际请求 batch，HiSim hook 把每个请求压缩成“本轮输入 Token 数、已有 KV Token 数”，再由 AIConfigurator 根据 Qwen3-8B 结构、H20 性能表和解析带宽模型估算各项算子耗时。各项毫秒值求和、应用 Prefill/Decode 修正系数后转换成秒，交给 HiSim 的模拟时钟。

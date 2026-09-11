@@ -1,5 +1,7 @@
 # SGLang 新手导览：从一次请求理解项目结构与核心功能
 
+[返回仿真文档导航](../README.md)
+
 > 本文基于本仓库固定的 SGLang `0.5.6.post2` 快照（commit `5c8bd8b51b`）讲解。
 > 目标不是罗列每个文件，而是帮你先建立一张能用于阅读源码的“心智地图”。
 
@@ -731,4 +733,4 @@ flowchart LR
 - [示例](../../../third_party/sglang/examples/)
 - [基准测试](../../../third_party/sglang/benchmark/)
 - [本项目 README](../../../README.md)
-- [HiSim-SGLang CPU Docker 交接说明](../../../HISIM_SGLANG_CPU_DOCKER_HANDOFF.md)
+- [HiSim-SGLang CPU Docker 操作说明](../../../README.md)

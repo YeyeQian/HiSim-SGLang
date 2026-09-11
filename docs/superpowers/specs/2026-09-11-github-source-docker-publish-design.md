@@ -18,6 +18,7 @@
 - `.worktrees/` 及任何现有或新建的 worktree/分支内容副本。
 - `third_party/llm-ep-simulator/`；该目录仅是本地参考项目。
 - `.local_docs/`；其中保存只适用于当前服务器的网络与代理排障文档。
+- `HISIM_SGLANG_CPU_DOCKER_HANDOFF.md` 和 `dev_docs/init_pj/hisim_sglang_cpu_docker_confirmed_plan.md`；两者是包含 `server146`、本机资源/代理及已过时实施状态的开发记录，只在根目录 `.local_docs/` 保留本地副本。
 - GitHub 凭据、代理凭据或其他机密信息。
 
 ## 用户体验
@@ -58,5 +59,6 @@ quickstart 失败时仍应尝试只停止它自己启动的项目容器，保留
 - `.dockerignore` 排除 Git 元数据、worktree、本地文档、本地参考仓库和所有生成产物。
 - AIConfigurator 的构建获取不依赖分支 tip 仍然指向固定 commit，ShareGPT URL 实际使用已声明的 revision。
 - 一次不含已忽略文件的 Git 清单审计证明大文件、缓存、数据和 `llm-ep-simulator` 没有进入提交。
+- 两份本服务器开发文档不在公开 Git 树中，本地 `.local_docs/` 副本与删除前版本逐字节一致，公开文档不留下指向它们的失效链接。
 - 本地主分支包含发布变更，功能 worktree/分支保留。
 - 向空 GitHub 仓库只推送 `main`；推送前运行最终验证和内容审计。

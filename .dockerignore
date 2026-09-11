@@ -1,3 +1,9 @@
+.git/
+.git
+**/.git
+.gitignore
+.dockerignore
+.gitmodules
 .worktrees/
 .superpowers/
 .local_docs/
@@ -15,3 +21,8 @@ artifacts/downloads/
 artifacts/image/
 __pycache__/
 *.py[cod]
+tests/
+dev_docs/
+docs/
+README.md
+AGENTS.md

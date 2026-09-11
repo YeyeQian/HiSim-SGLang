@@ -15,6 +15,10 @@ cat >"${tmp_dir}/tests/test_02_pass.sh" <<'EOF'
 #!/usr/bin/env bash
 printf 'shell-pass-ran\n' >>"${TEST_ALL_SENTINEL}"
 EOF
+cat >"${tmp_dir}/tests/test_03_invalid.sh" <<'EOF'
+#!/usr/bin/env bash
+if then
+EOF
 cat >"${tmp_dir}/tests/test_fixture.py" <<'EOF'
 import os
 import unittest
@@ -37,6 +41,7 @@ grep -Fxq shell-fail-ran "${tmp_dir}/sentinel"
 grep -Fxq shell-pass-ran "${tmp_dir}/sentinel"
 grep -Fxq python-ran "${tmp_dir}/sentinel"
 grep -Fq 'FAIL:' "${tmp_dir}/stdout"
+grep -Fq 'SYNTAX FAIL: tests/test_03_invalid.sh' "${tmp_dir}/stdout"
 grep -Fq 'aggregate test suite failed' "${tmp_dir}/stderr"
 
 printf 'test_all aggregation tests passed\n'
